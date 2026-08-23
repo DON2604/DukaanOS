@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../scan_invoice_screen/scan_invoice_screen.dart';
 import 'widgets/shop_profile_app_bar.dart';
 import 'widgets/shop_profile_form.dart';
 import 'widgets/shop_profile_continue_button.dart';
@@ -110,6 +111,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     debugPrint('Phone Number: $phoneNumber');
     debugPrint('Business Type: $businessTypeStr');
 
-    // TODO: Navigate to next onboarding screen (e.g. Scan My Shop)
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ScanInvoiceScreen()),
+    );
   }
 }

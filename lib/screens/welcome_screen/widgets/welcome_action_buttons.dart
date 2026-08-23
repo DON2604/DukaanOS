@@ -54,10 +54,7 @@ class WelcomeActionButtons extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               backgroundColor: const Color(0x99FFFFFF),
               foregroundColor: const Color(0xFF171917),
-              side: const BorderSide(
-                color: Color(0xFFCDD0C8),
-                width: 1.5,
-              ),
+              side: const BorderSide(color: Color(0xFFCDD0C8), width: 1.5),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
