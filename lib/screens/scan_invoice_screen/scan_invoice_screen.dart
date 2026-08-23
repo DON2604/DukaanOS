@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as digital_ink;
+import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart'
+    as digital_ink;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class ScanInvoiceScreen extends StatefulWidget {
@@ -159,6 +163,9 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
     final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
       final image = await controller.takePicture();
+      // The photo is now on disk, so release the hardware before moving to the
+      // OCR/LLM result page. ML Kit only needs the image file path.
+      await _disposeCamera();
       final recognizedText = await textRecognizer.processImage(
         InputImage.fromFilePath(image.path),
       );
@@ -170,6 +177,9 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
           builder: (_) => InvoiceOcrResultScreen(text: extractedText),
         ),
       );
+      if (mounted) {
+        await _initializeCamera();
+      }
     } on CameraException catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,6 +192,9 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
           builder: (_) => const InvoiceOcrResultScreen(text: ''),
         ),
       );
+      if (mounted) {
+        await _initializeCamera();
+      }
     } finally {
       await textRecognizer.close();
       if (mounted) {
@@ -203,10 +216,7 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
               Expanded(
                 child: Stack(
                   fit: StackFit.expand,
-                  children: [
-                    _buildCameraPreview(),
-                    _buildScanOverlay(),
-                  ],
+                  children: [_buildCameraPreview(), _buildScanOverlay()],
                 ),
               ),
               _buildCapturePanel(),
@@ -258,7 +268,9 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
     }
 
     final controller = _cameraController;
-    if (_errorText != null || controller == null || !controller.value.isInitialized) {
+    if (_errorText != null ||
+        controller == null ||
+        !controller.value.isInitialized) {
       return ColoredBox(
         color: Colors.black,
         child: Center(
@@ -280,7 +292,7 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
   Widget _buildScanOverlay() {
     return Column(
       children: [
-        SizedBox(height: 24,),
+        SizedBox(height: 24),
         Container(
           height: 64,
           color: const Color(0x66000000),
@@ -366,18 +378,19 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
   }
 
   Widget _buildBottomTabBar() {
-    return Container(
-      height: 78,
-      color: const Color(0xFFF9F5EE),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _BottomTabItem(icon: Icons.home_outlined, label: 'Home', active: false),
-          _BottomTabItem(icon: Icons.point_of_sale_outlined, label: 'Sales', active: true),
-          _BottomTabItem(icon: Icons.inventory_2_outlined, label: 'Inventory', active: false),
-          _BottomTabItem(icon: Icons.account_balance_wallet_outlined, label: 'Khata', active: false),
-          _BottomTabItem(icon: Icons.menu, label: 'More', active: false),
-        ],
+    return _ModernBottomNavigation(
+      selectedIndex: 1,
+      onSelected: _openTab,
+    );
+  }
+
+  void _openTab(int index) {
+    if (index == 1) {
+      return;
+    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => _AppPlaceholderPage(selectedIndex: index),
       ),
     );
   }
@@ -414,7 +427,6 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
       ),
     );
   }
-
 }
 
 class InvoiceOcrResultScreen extends StatefulWidget {
@@ -428,11 +440,27 @@ class InvoiceOcrResultScreen extends StatefulWidget {
 
 class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
   late String _text = widget.text;
+  InvoiceParseResult? _result;
+  bool _isConverting = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _convertToInvoiceJson();
+  }
+
+  Future<void> _convertToInvoiceJson() async {
+    final result = await _InvoiceAiParser.instance.parse(widget.text);
+    if (!mounted) return;
+    setState(() {
+      _result = result;
+      _isConverting = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final fields = _InvoiceFields.fromText(_text);
-    final needsHelp = _text.isEmpty || fields.hasMissingFields;
+    final result = _result;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F5EE),
@@ -454,19 +482,11 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            _text.isEmpty
-                ? 'No text was detected. Try capturing the invoice in better light.'
-                : 'Review the details before saving them to your records.',
-            style: const TextStyle(color: Color(0xFF6C625C), fontSize: 14),
+          const Text(
+            'SmolLM is checking whether this text is an invoice and converting it to JSON.',
+            style: TextStyle(color: Color(0xFF6C625C), fontSize: 14),
           ),
           const SizedBox(height: 20),
-          if (_text.isNotEmpty) _buildSummary(fields),
-          if (needsHelp) ...[
-            const SizedBox(height: 16),
-            _buildHandwritingFallback(context),
-          ],
-          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -484,6 +504,21 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          Text(
+            _isConverting
+                ? 'Converting to JSON'
+                : result!.isInvoice
+                ? 'Invoice JSON'
+                : 'Not an invoice',
+            style: const TextStyle(
+              color: Color(0xFF2C2926),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildConversionResult(result),
+          const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.camera_alt_outlined),
@@ -499,6 +534,47 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
     );
   }
 
+  Widget _buildConversionResult(InvoiceParseResult? result) {
+    if (_isConverting) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('SmolLM is converting the extracted text to JSON...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: result!.isInvoice ? Colors.white : const Color(0xFFFFF2E8),
+        border: Border.all(
+          color: result.isInvoice
+              ? const Color(0xFFE3D9D0)
+              : const Color(0xFFF0C9A9),
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        result.isInvoice
+            ? const JsonEncoder.withIndent('  ').convert(result.invoice)
+            : 'Text is not from an invoice.',
+        style: const TextStyle(
+          color: Color(0xFF2C2926),
+          fontSize: 15,
+          height: 1.5,
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildHandwritingFallback(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -512,7 +588,10 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
         children: [
           const Text(
             'Some details may be missing',
-            style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF71300E)),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF71300E),
+            ),
           ),
           const SizedBox(height: 5),
           const Text(
@@ -523,7 +602,9 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
           OutlinedButton.icon(
             onPressed: () async {
               final handwriting = await Navigator.of(context).push<String>(
-                MaterialPageRoute(builder: (_) => const HandwritingInputScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const HandwritingInputScreen(),
+                ),
               );
               if (handwriting != null && handwriting.trim().isNotEmpty) {
                 setState(() {
@@ -533,13 +614,16 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
             },
             icon: const Icon(Icons.edit_outlined),
             label: const Text('Try handwriting input'),
-            style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFB8490C)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFB8490C),
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ignore: unused_element
   Widget _buildSummary(_InvoiceFields fields) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -558,6 +642,136 @@ class _InvoiceOcrResultScreenState extends State<InvoiceOcrResultScreen> {
   }
 }
 
+/// Parses OCR text locally with SmolLM2 135M. The model is deliberately asked
+/// for a sentinel first, so ordinary camera text is never treated as an invoice.
+class _InvoiceAiParser {
+  _InvoiceAiParser._();
+
+  static final instance = _InvoiceAiParser._();
+  static const _modelUrl =
+      'https://huggingface.co/litert-community/SmolLM2-135M-Instruct/'
+      'resolve/main/SmolLM2_135M_Instruct.litertlm';
+
+  Future<void>? _prepareModel;
+
+  Future<InvoiceParseResult> parse(String text) async {
+    if (text.trim().isEmpty) return const InvoiceParseResult.notInvoice();
+
+    try {
+      await (_prepareModel ??= _ensureModel());
+      final model = await FlutterGemma.getActiveModel(
+        maxTokens: 1280,
+        preferredBackend: PreferredBackend.cpu,
+      );
+      try {
+        final chat = await model.createChat(
+          modelType: ModelType.general,
+          temperature: 0.1,
+          maxOutputTokens: 400,
+        );
+        await chat.addQueryChunk(
+          Message.text(text: _prompt(text), isUser: true),
+        );
+        final response = await chat.generateChatResponse();
+        if (response is! TextResponse) {
+          return const InvoiceParseResult.notInvoice();
+        }
+        return _parseResponse(response.token);
+      } finally {
+        await model.close();
+      }
+    } catch (_) {
+      // Do not guess an invoice from OCR text when the local model cannot run.
+      return const InvoiceParseResult.notInvoice();
+    }
+  }
+
+  Future<void> _ensureModel() async {
+    try {
+      final model = await FlutterGemma.getActiveModel(maxTokens: 1280);
+      await model.close();
+    } catch (_) {
+      await FlutterGemma.installModel(
+        modelType: ModelType.general,
+        fileType: ModelFileType.litertlm,
+      ).fromNetwork(_modelUrl).install();
+    }
+  }
+
+  String _prompt(String text) =>
+      '''
+You extract structured data from OCR text.
+Decide whether the text is a business invoice. If it is not an invoice, reply
+with exactly: NOT_AN_INVOICE
+
+If it is an invoice, reply with exactly one valid JSON object and no Markdown,
+explanation, or extra keys. Use this exact schema:
+{"invoice_number": string|null, "date": "YYYY-MM-DD"|null, "supplier": {"name": string|null, "phone": string|null}, "items": [{"name": string, "quantity": number|null, "unit": string|null, "unit_price": number|null, "total": number|null}], "subtotal": number|null, "tax": number|null, "grand_total": number|null}
+
+Never invent values. Convert dates only when the date is unambiguous. Keep phone
+numbers as strings and money/quantities as JSON numbers.
+
+OCR text:
+${text.trim().substring(0, text.trim().length > 1800 ? 1800 : text.trim().length)}
+''';
+
+  InvoiceParseResult _parseResponse(String response) {
+    final trimmed = response
+        .trim()
+        .replaceAll('```json', '')
+        .replaceAll('```', '')
+        .trim();
+    if (trimmed == 'NOT_AN_INVOICE') {
+      return const InvoiceParseResult.notInvoice();
+    }
+
+    final start = trimmed.indexOf('{');
+    final end = trimmed.lastIndexOf('}');
+    if (start < 0 || end <= start) return const InvoiceParseResult.notInvoice();
+
+    try {
+      final decoded = jsonDecode(trimmed.substring(start, end + 1));
+      if (decoded is! Map<String, dynamic> || !_hasInvoiceSchema(decoded)) {
+        return const InvoiceParseResult.notInvoice();
+      }
+      return InvoiceParseResult.invoice(decoded);
+    } on FormatException {
+      return const InvoiceParseResult.notInvoice();
+    }
+  }
+
+  bool _hasInvoiceSchema(Map<String, dynamic> value) {
+    const keys = {
+      'invoice_number',
+      'date',
+      'supplier',
+      'items',
+      'subtotal',
+      'tax',
+      'grand_total',
+    };
+    final supplier = value['supplier'];
+    return value.keys.toSet().containsAll(keys) &&
+        supplier is Map &&
+        supplier.containsKey('name') &&
+        supplier.containsKey('phone') &&
+        value['items'] is List;
+  }
+}
+
+class InvoiceParseResult {
+  final Map<String, dynamic>? invoice;
+
+  const InvoiceParseResult._(this.invoice);
+
+  const InvoiceParseResult.notInvoice() : invoice = null;
+
+  factory InvoiceParseResult.invoice(Map<String, dynamic> invoice) =>
+      InvoiceParseResult._(invoice);
+
+  bool get isInvoice => invoice != null;
+}
+
 class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
@@ -571,13 +785,21 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF55705D)))),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF55705D)),
+            ),
+          ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF263B2B)),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF263B2B),
+              ),
             ),
           ),
         ],
@@ -591,27 +813,40 @@ class _InvoiceFields {
   final String date;
   final String total;
 
-  const _InvoiceFields({required this.number, required this.date, required this.total});
+  const _InvoiceFields({
+    required this.number,
+    required this.date,
+    required this.total,
+  });
 
   bool get hasMissingFields =>
-      number == 'Not detected' || date == 'Not detected' || total == 'Not detected';
+      number == 'Not detected' ||
+      date == 'Not detected' ||
+      total == 'Not detected';
 
+  // ignore: unused_element
   factory _InvoiceFields.fromText(String text) {
     String find(RegExp pattern) =>
         pattern.firstMatch(text)?.group(1)?.trim() ?? 'Not detected';
 
     return _InvoiceFields(
-      number: find(RegExp(
-        r'(?:invoice|bill|inv)[\s._-]*(?:no|number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]*)',
-        caseSensitive: false,
-      )),
-      date: find(RegExp(
-        r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b',
-      )),
-      total: find(RegExp(
-        r'(?:grand\s+total|net\s+total|total\s+due|total)\s*[:.-]?\s*(?:rs\.?|inr|₹)?\s*([0-9][0-9,]*(?:\.\d{1,2})?)',
-        caseSensitive: false,
-      )),
+      number: find(
+        RegExp(
+          r'(?:invoice|bill|inv)[\s._-]*(?:no|number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]*)',
+          caseSensitive: false,
+        ),
+      ),
+      date: find(
+        RegExp(
+          r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b',
+        ),
+      ),
+      total: find(
+        RegExp(
+          r'(?:grand\s+total|net\s+total|total\s+due|total)\s*[:.-]?\s*(?:rs\.?|inr|₹)?\s*([0-9][0-9,]*(?:\.\d{1,2})?)',
+          caseSensitive: false,
+        ),
+      ),
     );
   }
 }
@@ -674,13 +909,17 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
       );
       if (!mounted) return;
       if (candidates.isEmpty || candidates.first.text.trim().isEmpty) {
-        setState(() => _errorText = 'No handwriting was recognized. Please try again.');
+        setState(
+          () => _errorText = 'No handwriting was recognized. Please try again.',
+        );
       } else {
         Navigator.of(context).pop(candidates.first.text);
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _errorText = 'Handwriting recognition failed. Check your connection and try again.');
+        setState(
+          () => _errorText = 'Handwriting recognition failed. Check your connection and try again.',
+        );
       }
     } finally {
       await recognizer.close();
@@ -703,9 +942,14 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Write the missing detail', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+            const Text(
+              'Write the missing detail',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
-            const Text('Use one line at a time. The downloaded language model recognizes your pen strokes on-device.'),
+            const Text(
+              'Use one line at a time. The downloaded language model recognizes your pen strokes on-device.',
+            ),
             const SizedBox(height: 18),
             Expanded(
               child: GestureDetector(
@@ -716,14 +960,19 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: const Color(0xFFB8490C), width: 1.5),
+                    border: Border.all(
+                      color: const Color(0xFFB8490C),
+                      width: 1.5,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: CustomPaint(
                     painter: _InkPainter(
                       strokes: [
                         ..._strokes,
-                        ...(_currentStroke == null ? <digital_ink.Stroke>[] : [_currentStroke!]),
+                        ...(_currentStroke == null
+                            ? <digital_ink.Stroke>[]
+                            : [_currentStroke!]),
                       ],
                     ),
                   ),
@@ -732,13 +981,18 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 10),
-              Text(_errorText!, style: const TextStyle(color: Color(0xFFB3261E))),
+              Text(
+                _errorText!,
+                style: const TextStyle(color: Color(0xFFB3261E)),
+              ),
             ],
             const SizedBox(height: 14),
             Row(
               children: [
                 TextButton.icon(
-                  onPressed: _isRecognizing ? null : () => setState(() => _strokes.clear()),
+                  onPressed: _isRecognizing
+                      ? null
+                      : () => setState(() => _strokes.clear()),
                   icon: const Icon(Icons.delete_outline),
                   label: const Text('Clear'),
                 ),
@@ -746,10 +1000,19 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
                 FilledButton.icon(
                   onPressed: _isRecognizing ? null : _recognize,
                   icon: _isRecognizing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Icon(Icons.text_fields),
                   label: Text(_isRecognizing ? 'Recognizing...' : 'Recognize'),
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB8490C)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFB8490C),
+                  ),
                 ),
               ],
             ),
@@ -784,36 +1047,102 @@ class _InkPainter extends CustomPainter {
   bool shouldRepaint(covariant _InkPainter oldDelegate) => true;
 }
 
-class _BottomTabItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
+class _ModernBottomNavigation extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
 
-  const _BottomTabItem({
-    required this.icon,
-    required this.label,
-    required this.active,
+  const _ModernBottomNavigation({
+    required this.selectedIndex,
+    required this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = const Color(0xFFB8490C);
-    final idleColor = const Color(0xFF4D3E39);
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, color: active ? activeColor : idleColor, size: 24),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: active ? activeColor : idleColor,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 11,
-          ),
+    return NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onSelected,
+      height: 76,
+      backgroundColor: const Color(0xFFF9F5EE),
+      indicatorColor: const Color(0xFFD6F4DF),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.point_of_sale_outlined),
+          selectedIcon: Icon(Icons.point_of_sale),
+          label: 'Sales',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.inventory_2_outlined),
+          selectedIcon: Icon(Icons.inventory_2),
+          label: 'Inventory',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.account_balance_wallet_outlined),
+          selectedIcon: Icon(Icons.account_balance_wallet),
+          label: 'Khata',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.menu_outlined),
+          selectedIcon: Icon(Icons.menu),
+          label: 'More',
         ),
       ],
+    );
+  }
+}
+
+class _AppPlaceholderPage extends StatelessWidget {
+  final int selectedIndex;
+
+  const _AppPlaceholderPage({required this.selectedIndex});
+
+  static const _titles = ['Home', 'Sales', 'Inventory', 'Khata', 'More'];
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _titles[selectedIndex];
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F5EE),
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: const Color(0xFFF9F5EE),
+        foregroundColor: const Color(0xFF2C2926),
+        elevation: 0,
+      ),
+      body: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFF2C2926),
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      bottomNavigationBar: _ModernBottomNavigation(
+        selectedIndex: selectedIndex,
+        onSelected: (index) {
+          if (index == selectedIndex) return;
+          if (index == 1) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute<void>(
+                builder: (_) => const ScanInvoiceScreen(),
+              ),
+            );
+            return;
+          }
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => _AppPlaceholderPage(selectedIndex: index),
+            ),
+          );
+        },
+      ),
     );
   }
 }
