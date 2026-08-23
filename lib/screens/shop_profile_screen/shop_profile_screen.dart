@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../main_shell/main_shell.dart';
+import 'models/business_type.dart';
 import 'widgets/shop_profile_app_bar.dart';
 import 'widgets/shop_profile_form.dart';
 import 'widgets/shop_profile_continue_button.dart';

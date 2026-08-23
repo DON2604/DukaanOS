@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widgets/inventory_placeholder.dart';
+
 class InventoryScreen extends StatelessWidget {
   const InventoryScreen({super.key});
 
@@ -16,28 +18,7 @@ class InventoryScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
         ),
       ),
-      body: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inventory_2_outlined, size: 64, color: Color(0xFFB8490C)),
-            SizedBox(height: 16),
-            Text(
-              'Inventory',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF2C2926),
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Coming soon',
-              style: TextStyle(fontSize: 15, color: Color(0xFF6C625C)),
-            ),
-          ],
-        ),
-      ),
+      body: const InventoryPlaceholder(),
     );
   }
 }

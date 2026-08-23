@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../widgets/glass_container.dart';
+import '../models/business_type.dart';
 import 'business_type_card.dart';
-
-enum BusinessType { kirana, bakery, vegetable, hardware, other }
 
 class ShopProfileForm extends StatefulWidget {
   final TextEditingController shopNameController;
