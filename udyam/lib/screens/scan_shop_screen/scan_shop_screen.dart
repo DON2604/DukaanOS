@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../scan_invoice_screen/services/camera_error_mapper.dart';
-import '../welcome_screen/welcome_screen.dart';
+import '../shop_profile_screen/shop_profile_screen.dart';
 import 'models/detected_product.dart';
 import 'shop_inventory_ready_screen.dart';
 import 'widgets/shop_camera_preview.dart';
@@ -211,23 +211,19 @@ class _ScanShopScreenState extends State<ScanShopScreen>
     );
   }
 
-  void _leaveToWelcome() {
+  void _leaveScan() {
     _progressTimer?.cancel();
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
       return;
     }
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const WelcomeScreen()),
+      MaterialPageRoute<void>(builder: (_) => const ShopProfileScreen()),
     );
   }
 
   void _handleBack() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-      return;
-    }
-    _leaveToWelcome();
+    _leaveScan();
   }
 
   @override
@@ -272,7 +268,7 @@ class _ScanShopScreenState extends State<ScanShopScreen>
                     totalSections: _totalSections,
                     isScanning: _isScanning,
                     onPrimaryPressed: _handlePrimaryAction,
-                    onSkipPressed: _leaveToWelcome,
+                    onSkipPressed: _leaveScan,
                   ),
                 ],
               ),

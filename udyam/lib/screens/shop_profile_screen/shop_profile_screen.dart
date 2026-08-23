@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../scan_shop_screen/scan_shop_screen.dart';
+import '../main_shell/main_shell.dart';
 import 'models/business_type.dart';
 import 'widgets/shop_profile_app_bar.dart';
 import 'widgets/shop_profile_form.dart';
@@ -113,7 +113,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     debugPrint('Business Type: $businessTypeStr');
 
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const ScanShopScreen()),
+      MaterialPageRoute(builder: (context) => const MainShell()),
     );
   }
 }
