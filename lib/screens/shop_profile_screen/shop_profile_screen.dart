@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../scan_invoice_screen/scan_invoice_screen.dart';
+import '../main_shell/main_shell.dart';
 import 'widgets/shop_profile_app_bar.dart';
 import 'widgets/shop_profile_form.dart';
 import 'widgets/shop_profile_continue_button.dart';
@@ -112,7 +112,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     debugPrint('Business Type: $businessTypeStr');
 
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const ScanInvoiceScreen()),
+      MaterialPageRoute(builder: (context) => const MainShell()),
     );
   }
 }

@@ -220,7 +220,6 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
                 ),
               ),
               _buildCapturePanel(),
-              _buildBottomTabBar(),
             ],
           ),
           if (_isReadingInvoice) _buildReadingOverlay(),
@@ -299,14 +298,16 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                tooltip: 'Back',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 8),
+              if (Navigator.of(context).canPop()) ...[
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  tooltip: 'Back',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+              ],
               const Expanded(
                 child: Text(
                   'Scan invoice',
@@ -373,24 +374,6 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBottomTabBar() {
-    return _ModernBottomNavigation(
-      selectedIndex: 1,
-      onSelected: _openTab,
-    );
-  }
-
-  void _openTab(int index) {
-    if (index == 1) {
-      return;
-    }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => _AppPlaceholderPage(selectedIndex: index),
       ),
     );
   }
@@ -1047,102 +1030,3 @@ class _InkPainter extends CustomPainter {
   bool shouldRepaint(covariant _InkPainter oldDelegate) => true;
 }
 
-class _ModernBottomNavigation extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
-
-  const _ModernBottomNavigation({
-    required this.selectedIndex,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: onSelected,
-      height: 76,
-      backgroundColor: const Color(0xFFF9F5EE),
-      indicatorColor: const Color(0xFFD6F4DF),
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.point_of_sale_outlined),
-          selectedIcon: Icon(Icons.point_of_sale),
-          label: 'Sales',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2),
-          label: 'Inventory',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.account_balance_wallet_outlined),
-          selectedIcon: Icon(Icons.account_balance_wallet),
-          label: 'Khata',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.menu_outlined),
-          selectedIcon: Icon(Icons.menu),
-          label: 'More',
-        ),
-      ],
-    );
-  }
-}
-
-class _AppPlaceholderPage extends StatelessWidget {
-  final int selectedIndex;
-
-  const _AppPlaceholderPage({required this.selectedIndex});
-
-  static const _titles = ['Home', 'Sales', 'Inventory', 'Khata', 'More'];
-
-  @override
-  Widget build(BuildContext context) {
-    final title = _titles[selectedIndex];
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F5EE),
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: const Color(0xFFF9F5EE),
-        foregroundColor: const Color(0xFF2C2926),
-        elevation: 0,
-      ),
-      body: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFF2C2926),
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      bottomNavigationBar: _ModernBottomNavigation(
-        selectedIndex: selectedIndex,
-        onSelected: (index) {
-          if (index == selectedIndex) return;
-          if (index == 1) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute<void>(
-                builder: (_) => const ScanInvoiceScreen(),
-              ),
-            );
-            return;
-          }
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute<void>(
-              builder: (_) => _AppPlaceholderPage(selectedIndex: index),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
