@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 class WelcomeActionButtons extends StatelessWidget {
   final VoidCallback? onSetupShopPressed;
-  final VoidCallback? onSeeHowItWorksPressed;
+  final VoidCallback? onSignInPressed;
 
   const WelcomeActionButtons({
     super.key,
     this.onSetupShopPressed,
-    this.onSeeHowItWorksPressed,
+    this.onSignInPressed,
   });
 
   @override
@@ -50,7 +50,7 @@ class WelcomeActionButtons extends StatelessWidget {
           width: double.infinity,
           height: 54,
           child: OutlinedButton(
-            onPressed: onSeeHowItWorksPressed,
+            onPressed: onSignInPressed,
             style: OutlinedButton.styleFrom(
               backgroundColor: const Color(0x99FFFFFF),
               foregroundColor: const Color(0xFF171917),
@@ -61,7 +61,7 @@ class WelcomeActionButtons extends StatelessWidget {
               ),
             ),
             child: const Text(
-              'See how it works',
+              'Sign in',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,

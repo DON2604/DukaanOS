@@ -58,7 +58,8 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
   }
 
   bool get _isFormValid {
-    final hasBasics = _shopNameController.text.trim().isNotEmpty &&
+    final hasBasics =
+        _shopNameController.text.trim().isNotEmpty &&
         _ownerNameController.text.trim().isNotEmpty &&
         _phoneNumberController.text.trim().isNotEmpty &&
         int.tryParse(_telegramChatIdController.text.trim()) != null;
@@ -119,26 +120,26 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
     final ownerName = _ownerNameController.text.trim();
     final phoneNumber = _phoneNumberController.text.trim();
     final telegramChatId = int.parse(_telegramChatIdController.text.trim());
+    final shopName = _shopNameController.text.trim();
+    final shopType = _selectedBusinessType.toApiValue(
+      _customBusinessTypeController.text,
+    );
 
     setState(() => _isSubmitting = true);
     try {
-      try {
-        await _authService.createAccount(
-          name: ownerName,
-          phone: phoneNumber,
-          telegramChatId: telegramChatId,
-        );
-      } on AuthException catch (error) {
-        final alreadyRegistered = error.message.toLowerCase().contains(
-          'already registered',
-        );
-        if (!alreadyRegistered) rethrow;
-      }
+      await _authService.createAccount(
+        name: ownerName,
+        phone: phoneNumber,
+        telegramChatId: telegramChatId,
+        shopName: shopName,
+        shopType: shopType,
+      );
       await _authService.requestCreateAccountOtp(phoneNumber);
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => VerifyOtpScreen(phone: phoneNumber),
+          builder: (context) =>
+              VerifyOtpScreen(phone: phoneNumber, flow: AuthFlow.signUp),
         ),
       );
     } on AuthException catch (error) {
@@ -156,10 +157,7 @@ class _ShopProfileScreenState extends State<ShopProfileScreen> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 }

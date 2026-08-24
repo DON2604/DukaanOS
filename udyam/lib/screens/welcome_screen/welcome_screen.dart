@@ -4,6 +4,7 @@ import 'widgets/welcome_app_bar.dart';
 import 'widgets/welcome_hero_content.dart';
 import 'widgets/welcome_action_buttons.dart';
 import '../shop_profile_screen/shop_profile_screen.dart';
+import '../sign_in_screen/sign_in_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -27,8 +28,8 @@ class WelcomeScreen extends StatelessWidget {
                   onSetupShopPressed: () {
                     _handleSetupShop(context);
                   },
-                  onSeeHowItWorksPressed: () {
-                    _handleSeeHowItWorks(context);
+                  onSignInPressed: () {
+                    _handleSignIn(context);
                   },
                 ),
               ),
@@ -45,8 +46,8 @@ class WelcomeScreen extends StatelessWidget {
     ).push(MaterialPageRoute(builder: (context) => const ShopProfileScreen()));
   }
 
-  void _handleSeeHowItWorks(BuildContext context) {
-    // TODO: Navigate to onboarding demo / explanation
-    debugPrint('See how it works pressed');
+  void _handleSignIn(BuildContext context) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (context) => const SignInScreen()));
   }
 }

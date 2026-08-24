@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../constants.dart';
+import 'session_store.dart';
+
+enum AuthFlow { signUp, signIn }
 
 class AuthException implements Exception {
   AuthException(this.message);
@@ -27,11 +30,15 @@ class AuthService {
     required String name,
     required String phone,
     required int telegramChatId,
+    required String shopName,
+    required String shopType,
   }) async {
     final response = await _post(AppConstants.createAccount, {
       'name': name,
       'phone': phone,
       'telegram_chat_id': telegramChatId,
+      'shop_name': shopName,
+      'shop_type': shopType,
     });
     if (response.statusCode != 201) {
       throw AuthException(_messageFrom(response));
@@ -47,14 +54,24 @@ class AuthService {
     }
   }
 
-  Future<String> verifyCreateAccountOtp({
+  Future<void> requestSignInOtp(String phone) async {
+    final response = await _post(AppConstants.signInRequestOtp, {
+      'phone': phone,
+    });
+    if (response.statusCode != 200) {
+      throw AuthException(_messageFrom(response));
+    }
+  }
+
+  Future<String> verifyOtp({
     required String phone,
     required String otp,
+    required AuthFlow flow,
   }) async {
-    final response = await _post(AppConstants.createAccountVerifyOtp, {
-      'phone': phone,
-      'otp': otp,
-    });
+    final path = flow == AuthFlow.signUp
+        ? AppConstants.createAccountVerifyOtp
+        : AppConstants.signInVerifyOtp;
+    final response = await _post(path, {'phone': phone, 'otp': otp});
     if (response.statusCode != 200) {
       throw AuthException(_messageFrom(response));
     }
@@ -63,11 +80,35 @@ class AuthService {
     final token = body is Map<String, dynamic>
         ? body['access_token'] as String?
         : null;
-    if (token == null || token.isEmpty) {
-      throw AuthException('Verification succeeded but no token was returned');
+    final sessionId = body is Map<String, dynamic>
+        ? body['session_id'] as String?
+        : null;
+    if (token == null ||
+        token.isEmpty ||
+        sessionId == null ||
+        sessionId.isEmpty) {
+      throw AuthException('Verification succeeded but no session was returned');
     }
     AuthSession.accessToken = token;
-    return token;
+    await SessionStore.save(sessionId: sessionId, accessToken: token);
+    return sessionId;
+  }
+
+  Future<bool> verifySession(String sessionId) async {
+    final response = await _client
+        .get(
+          Uri.parse(
+            '${AppConstants.apiBaseUrl}${AppConstants.session}/$sessionId',
+          ),
+          headers: const {'Accept': 'application/json'},
+        )
+        .timeout(_timeout);
+    if (response.statusCode == 404) return false;
+    if (response.statusCode != 200) {
+      throw AuthException(_messageFrom(response));
+    }
+    final body = jsonDecode(response.body);
+    return body is Map<String, dynamic> && body['valid'] == true;
   }
 
   Future<http.Response> _post(String path, Map<String, dynamic> body) {

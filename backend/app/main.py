@@ -2,6 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from sqlalchemy import text
 from app.db.session import async_session, engine
 from app.db.base import Base
 from app.routers import auth
@@ -21,6 +22,14 @@ async def lifespan(app: FastAPI):
     logging.getLogger(__name__).info("DukaanOS server starting")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all does not update existing tables. Keep this migration
+        # idempotent so previously-created development databases are upgraded.
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS shop_name VARCHAR(200)")
+        )
+        await conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS shop_type VARCHAR(120)")
+        )
 
     async def cleanup_loop():
         while True:

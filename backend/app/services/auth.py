@@ -1,6 +1,7 @@
 import logging
 import random
 import string
+import uuid
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from sqlalchemy import delete, select
@@ -25,8 +26,22 @@ def create_access_token(user_id: str) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-async def create_account(db: AsyncSession, name: str, phone: str, telegram_chat_id: int) -> User:
-    user = User(name=name, phone=phone, telegram_chat_id=telegram_chat_id, is_active=False)
+async def create_account(
+    db: AsyncSession,
+    name: str,
+    phone: str,
+    telegram_chat_id: int,
+    shop_name: str,
+    shop_type: str,
+) -> User:
+    user = User(
+        name=name,
+        phone=phone,
+        telegram_chat_id=telegram_chat_id,
+        shop_name=shop_name,
+        shop_type=shop_type,
+        is_active=False,
+    )
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -42,6 +57,11 @@ async def create_account(db: AsyncSession, name: str, phone: str, telegram_chat_
 
 async def get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
     result = await db.execute(select(User).where(User.phone == phone))
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -72,8 +92,8 @@ async def request_otp(db: AsyncSession, phone: str) -> str:
     return "sent" if sent else "delivery_failed"
 
 
-async def verify_otp(db: AsyncSession, phone: str, code: str) -> str | None:
-    """Verify OTP and return access token, or None if invalid."""
+async def verify_otp(db: AsyncSession, phone: str, code: str) -> tuple[str, uuid.UUID] | None:
+    """Verify OTP and return the access token and user/session id."""
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.OTP_EXPIRE_SECONDS)
 
     result = await db.execute(
@@ -96,7 +116,7 @@ async def verify_otp(db: AsyncSession, phone: str, code: str) -> str | None:
     await db.commit()
     logger.info("User verified: id=%s phone=%s", user.id, phone)
 
-    return create_access_token(str(user.id))
+    return create_access_token(str(user.id)), user.id
 
 
 async def delete_expired_unverified_users(db: AsyncSession) -> int:

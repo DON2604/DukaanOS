@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +10,7 @@ from app.schemas.auth import (
     VerifyOTPRequest,
     UserResponse,
     TokenResponse,
+    SessionResponse,
     MessageResponse,
 )
 from app.services import auth as auth_service
@@ -31,7 +34,14 @@ async def create_account(body: CreateAccountRequest, db: AsyncSession = Depends(
     if await auth_service.get_user_by_telegram_chat_id(db, body.telegram_chat_id):
         raise HTTPException(status_code=400, detail="Telegram account already registered")
 
-    user = await auth_service.create_account(db, body.name, body.phone, body.telegram_chat_id)
+    user = await auth_service.create_account(
+        db,
+        body.name,
+        body.phone,
+        body.telegram_chat_id,
+        body.shop_name,
+        body.shop_type,
+    )
     return user
 
 
@@ -45,10 +55,11 @@ async def create_account_request_otp(body: RequestOTPRequest, db: AsyncSession =
 
 @router.post("/create-account/verify-otp", response_model=TokenResponse)
 async def create_account_verify_otp(body: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
-    token = await auth_service.verify_otp(db, body.phone, body.otp)
-    if not token:
+    session = await auth_service.verify_otp(db, body.phone, body.otp)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired OTP")
-    return {"access_token": token}
+    token, session_id = session
+    return {"access_token": token, "session_id": session_id}
 
 
 # --- Sign in (phone only; telegram_chat_id is already on the user) ---
@@ -56,6 +67,9 @@ async def create_account_verify_otp(body: VerifyOTPRequest, db: AsyncSession = D
 
 @router.post("/sign-in/request-otp", response_model=MessageResponse)
 async def sign_in_request_otp(body: RequestOTPRequest, db: AsyncSession = Depends(get_db)):
+    user = await auth_service.get_user_by_phone(db, body.phone)
+    if user and not user.is_active:
+        raise HTTPException(status_code=403, detail="Account setup is not verified")
     result = await auth_service.request_otp(db, body.phone)
     if result != "sent":
         raise _otp_http_error(result)
@@ -64,7 +78,19 @@ async def sign_in_request_otp(body: RequestOTPRequest, db: AsyncSession = Depend
 
 @router.post("/sign-in/verify-otp", response_model=TokenResponse)
 async def sign_in_verify_otp(body: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
-    token = await auth_service.verify_otp(db, body.phone, body.otp)
-    if not token:
+    user = await auth_service.get_user_by_phone(db, body.phone)
+    if user and not user.is_active:
+        raise HTTPException(status_code=403, detail="Account setup is not verified")
+    session = await auth_service.verify_otp(db, body.phone, body.otp)
+    if not session:
         raise HTTPException(status_code=401, detail="Invalid or expired OTP")
-    return {"access_token": token}
+    token, session_id = session
+    return {"access_token": token, "session_id": session_id}
+
+
+@router.get("/session/{session_id}", response_model=SessionResponse)
+async def verify_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    user = await auth_service.get_user_by_id(db, session_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"valid": True, "user": user}

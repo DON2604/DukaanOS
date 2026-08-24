@@ -15,7 +15,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(15), unique=True, index=True)
     telegram_chat_id: Mapped[int] = mapped_column(BigInteger, unique=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    shop_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    shop_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

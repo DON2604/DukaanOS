@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 
-import 'screens/welcome_screen/welcome_screen.dart';
+import 'screens/app_startup/app_startup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +26,7 @@ class UdyamApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
       ),
-      home: const WelcomeScreen(),
+      home: const AppStartupScreen(),
     );
   }
 }

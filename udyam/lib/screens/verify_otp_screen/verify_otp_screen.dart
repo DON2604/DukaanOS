@@ -7,9 +7,10 @@ import '../main_shell/main_shell.dart';
 import '../shop_profile_screen/widgets/shop_profile_app_bar.dart';
 
 class VerifyOtpScreen extends StatefulWidget {
-  const VerifyOtpScreen({super.key, required this.phone});
+  const VerifyOtpScreen({super.key, required this.phone, required this.flow});
 
   final String phone;
+  final AuthFlow flow;
 
   @override
   State<VerifyOtpScreen> createState() => _VerifyOtpScreenState();
@@ -35,9 +36,10 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
     setState(() => _isVerifying = true);
     try {
-      await _authService.verifyCreateAccountOtp(
+      await _authService.verifyOtp(
         phone: widget.phone,
         otp: _otpController.text.trim(),
+        flow: widget.flow,
       );
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -49,7 +51,9 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       _showMessage(error.message);
     } catch (_) {
       if (!mounted) return;
-      _showMessage('Could not verify OTP. Check your connection and try again.');
+      _showMessage(
+        'Could not verify OTP. Check your connection and try again.',
+      );
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -60,7 +64,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
     setState(() => _isResending = true);
     try {
-      await _authService.requestCreateAccountOtp(widget.phone);
+      if (widget.flow == AuthFlow.signUp) {
+        await _authService.requestCreateAccountOtp(widget.phone);
+      } else {
+        await _authService.requestSignInOtp(widget.phone);
+      }
       if (!mounted) return;
       _showMessage('A new OTP was sent to your Telegram');
     } on AuthException catch (error) {
@@ -76,10 +84,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -171,8 +176,9 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                     size: 22,
                                   ),
                                 ),
-                                prefixIconConstraints:
-                                    const BoxConstraints(minWidth: 36),
+                                prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 36,
+                                ),
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 16,
@@ -230,8 +236,9 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                 backgroundColor: _canVerify
                     ? const Color(0xFFB8490C)
                     : const Color(0xFFE2E4DE),
-                foregroundColor:
-                    _canVerify ? Colors.white : const Color(0xFF8A8E88),
+                foregroundColor: _canVerify
+                    ? Colors.white
+                    : const Color(0xFF8A8E88),
                 elevation: _canVerify ? 2 : 0,
                 shadowColor: _canVerify
                     ? const Color(0xFFB8490C).withValues(alpha: 0.3)
