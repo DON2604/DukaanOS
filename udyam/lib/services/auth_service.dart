@@ -70,10 +70,18 @@ class AuthService {
     return token;
   }
 
+  Uri _buildUri(String path) {
+    final base = AppConstants.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final urlString = base.startsWith('http://') || base.startsWith('https://')
+        ? '$base$path'
+        : 'http://$base$path';
+    return Uri.parse(urlString);
+  }
+
   Future<http.Response> _post(String path, Map<String, dynamic> body) {
     return _client
         .post(
-          Uri.parse('${AppConstants.apiBaseUrl}$path'),
+          _buildUri(path),
           headers: const {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
