@@ -2,21 +2,23 @@ import 'package:flutter/material.dart';
 
 class ShopProfileContinueButton extends StatelessWidget {
   final VoidCallback? onPressed;
+  final bool isLoading;
 
   const ShopProfileContinueButton({
     super.key,
     this.onPressed,
+    this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isEnabled = onPressed != null;
+    final isEnabled = onPressed != null || isLoading;
 
     return SizedBox(
       width: double.infinity,
       height: 54,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor:
               isEnabled ? const Color(0xFFB8490C) : const Color(0xFFE2E4DE),
@@ -30,24 +32,33 @@ class ShopProfileContinueButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Continue',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
+        child: isLoading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Continue',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 20,
+                  ),
+                ],
               ),
-            ),
-            SizedBox(width: 8),
-            Icon(
-              Icons.arrow_forward_rounded,
-              size: 20,
-            ),
-          ],
-        ),
       ),
     );
   }

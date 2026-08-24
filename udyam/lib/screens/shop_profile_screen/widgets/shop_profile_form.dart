@@ -8,6 +8,7 @@ class ShopProfileForm extends StatefulWidget {
   final TextEditingController shopNameController;
   final TextEditingController ownerNameController;
   final TextEditingController phoneNumberController;
+  final TextEditingController telegramChatIdController;
   final TextEditingController customBusinessTypeController;
   final BusinessType selectedBusinessType;
   final ValueChanged<BusinessType> onBusinessTypeChanged;
@@ -17,6 +18,7 @@ class ShopProfileForm extends StatefulWidget {
     required this.shopNameController,
     required this.ownerNameController,
     required this.phoneNumberController,
+    required this.telegramChatIdController,
     required this.customBusinessTypeController,
     required this.selectedBusinessType,
     required this.onBusinessTypeChanged,
@@ -69,6 +71,15 @@ class _ShopProfileFormState extends State<ShopProfileForm> {
                 hintText: '+91',
                 prefixIcon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 20),
+              _buildLabel('Telegram Chat ID'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: widget.telegramChatIdController,
+                hintText: 'e.g. 123456789',
+                prefixIcon: Icons.telegram,
+                keyboardType: TextInputType.number,
               ),
             ],
           ),
