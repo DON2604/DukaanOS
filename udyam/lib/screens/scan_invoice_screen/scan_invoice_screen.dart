@@ -152,7 +152,7 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
     try {
       final image = await controller.takePicture();
       // The photo is now on disk, so release the hardware before moving to the
-      // OCR/LLM result page. ML Kit only needs the image file path.
+      // OCR/Gemini result page. ML Kit and the upload both use this file.
       await _disposeCamera();
       final recognizedText = await textRecognizer.processImage(
         InputImage.fromFilePath(image.path),
@@ -162,7 +162,10 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => InvoiceOcrResultScreen(text: extractedText),
+          builder: (_) => InvoiceOcrResultScreen(
+            text: extractedText,
+            imagePath: image.path,
+          ),
         ),
       );
       if (mounted) {
@@ -177,7 +180,8 @@ class _ScanInvoiceScreenState extends State<ScanInvoiceScreen>
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => const InvoiceOcrResultScreen(text: ''),
+          builder: (_) =>
+              const InvoiceOcrResultScreen(text: '', imagePath: null),
         ),
       );
       if (mounted) {

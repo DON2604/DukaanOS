@@ -20,10 +20,10 @@ class ShopProfileContinueButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-              isEnabled ? const Color(0xFFB8490C) : const Color(0xFFE2E4DE),
-          foregroundColor:
-              isEnabled ? Colors.white : const Color(0xFF8A8E88),
+          backgroundColor: isEnabled
+              ? const Color(0xFFB8490C)
+              : const Color(0xFFE2E4DE),
+          foregroundColor: isEnabled ? Colors.white : const Color(0xFF8A8E88),
           elevation: isEnabled ? 2 : 0,
           shadowColor: isEnabled
               ? const Color(0xFFB8490C).withValues(alpha: 0.3)
@@ -53,10 +53,7 @@ class ShopProfileContinueButton extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 20,
-                  ),
+                  Icon(Icons.arrow_forward_rounded, size: 20),
                 ],
               ),
       ),

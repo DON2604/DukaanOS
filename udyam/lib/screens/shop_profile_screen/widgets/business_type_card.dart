@@ -24,9 +24,7 @@ class BusinessTypeCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFFFFF0E6)
-              : const Color(0xB8FFFFFF),
+          color: isSelected ? const Color(0xFFFFF0E6) : const Color(0xB8FFFFFF),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
@@ -60,11 +58,7 @@ class BusinessTypeCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
-                    child: Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 16,
-                    ),
+                    child: Icon(Icons.check, color: Colors.white, size: 16),
                   ),
                 ),
               ),

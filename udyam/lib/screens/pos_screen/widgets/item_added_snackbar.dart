@@ -75,9 +75,7 @@ void showItemAddedSnackBar(
                   : Colors.white24,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: quantity > 1
-                    ? const Color(0xFFB8490C)
-                    : Colors.white38,
+                color: quantity > 1 ? const Color(0xFFB8490C) : Colors.white38,
               ),
             ),
             child: Text(

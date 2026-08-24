@@ -27,9 +27,7 @@ class MainBottomNav extends StatelessWidget {
   List<CurvedNavigationBarItem> get _items => [
     CurvedNavigationBarItem(
       child: Icon(
-        selectedIndex == 0
-            ? Icons.point_of_sale
-            : Icons.point_of_sale_outlined,
+        selectedIndex == 0 ? Icons.point_of_sale : Icons.point_of_sale_outlined,
         color: selectedIndex == 0 ? _activeIconColor : _inactiveIconColor,
       ),
       label: 'POS',

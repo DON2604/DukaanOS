@@ -63,8 +63,7 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
       if (!mounted) return;
       if (candidates.isEmpty || candidates.first.text.trim().isEmpty) {
         setState(
-          () =>
-              _errorText = 'No handwriting was recognized. Please try again.',
+          () => _errorText = 'No handwriting was recognized. Please try again.',
         );
       } else {
         Navigator.of(context).pop(candidates.first.text);
@@ -72,8 +71,7 @@ class _HandwritingInputScreenState extends State<HandwritingInputScreen> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _errorText =
-              'Handwriting recognition failed. Check your connection and try again.',
+          () => _errorText = 'Handwriting recognition failed. Check your connection and try again.',
         );
       }
     } finally {

@@ -5,10 +5,7 @@ import '../handwriting_input_screen.dart';
 class HandwritingFallback extends StatelessWidget {
   final ValueChanged<String> onHandwritingRecognized;
 
-  const HandwritingFallback({
-    super.key,
-    required this.onHandwritingRecognized,
-  });
+  const HandwritingFallback({super.key, required this.onHandwritingRecognized});
 
   @override
   Widget build(BuildContext context) {

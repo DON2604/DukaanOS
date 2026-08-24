@@ -322,9 +322,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
             onAddCustomItem: _onAddCustomItem,
             onAddDiscount: _onAddDiscount,
             onSaveDraft: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Sale saved as draft')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sale saved as draft')),
+              );
               _clearBill();
             },
             onCheckout: () {

@@ -28,7 +28,10 @@ class CheckoutSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Subtotal', style: TextStyle(color: Color(0xFF6C625C))),
+              const Text(
+                'Subtotal',
+                style: TextStyle(color: Color(0xFF6C625C)),
+              ),
               Text(
                 '₹${subtotal.toStringAsFixed(2)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
@@ -39,7 +42,10 @@ class CheckoutSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Discount', style: TextStyle(color: Color(0xFF6C625C))),
+              const Text(
+                'Discount',
+                style: TextStyle(color: Color(0xFF6C625C)),
+              ),
               GestureDetector(
                 onTap: onAddDiscount,
                 child: Text(

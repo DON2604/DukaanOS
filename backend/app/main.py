@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from app.db.session import async_session, engine
 from app.db.base import Base
-from app.routers import auth
+from app.routers import auth, inventory, invoices
 from app.services.auth import delete_expired_unverified_users
 
 logging.basicConfig(
@@ -14,6 +14,7 @@ logging.basicConfig(
 )
 
 # Import models so Base.metadata picks them up
+import app.models.inventory  # noqa: F401
 import app.models.user  # noqa: F401
 
 
@@ -50,6 +51,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="DukaanOS", version="0.1.0", lifespan=lifespan)
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(invoices.router, prefix="/api")
+app.include_router(inventory.router, prefix="/api")
 
 
 @app.get("/health")

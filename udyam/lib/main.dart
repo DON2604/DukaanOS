@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 
 import 'screens/app_startup/app_startup_screen.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await FlutterGemma.initialize(inferenceEngines: const [LiteRtLmEngine()]);
+void main() {
   runApp(const UdyamApp());
 }
 
