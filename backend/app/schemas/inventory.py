@@ -44,6 +44,7 @@ class InventoryBulkAddRequest(BaseModel):
     items: list[InventoryBulkItem] = Field(min_length=1, max_length=500)
     supplier_name: str | None = Field(default=None, max_length=300)
     invoice_number: str | None = Field(default=None, max_length=120)
+    idempotency_key: uuid.UUID | None = None
 
     @field_validator("supplier_name", "invoice_number")
     @classmethod

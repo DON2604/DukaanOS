@@ -9,6 +9,7 @@ import 'models/cart_item.dart';
 import 'models/product.dart';
 import 'services/barcode_product_service.dart';
 import 'services/camera_input_image.dart';
+import 'services/checkout_service.dart';
 import 'services/product_catalog.dart';
 import 'widgets/add_custom_item_dialog.dart';
 import 'widgets/add_discount_dialog.dart';
@@ -38,9 +39,11 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   final BarcodeScanner _barcodeScanner = BarcodeScanner();
   final BarcodeProductService _barcodeProductService =
       const BarcodeProductService();
+  final CheckoutService _checkoutService = CheckoutService();
 
   final List<CartItem> _cart = [];
   double _discount = 0.0;
+  bool _isCheckingOut = false;
   final TextEditingController _searchController = TextEditingController();
   final Map<String, Product> _catalog = createDefaultCatalog();
 
@@ -300,6 +303,35 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     return finalPrice < 0 ? 0.0 : finalPrice;
   }
 
+  Future<void> _checkout() async {
+    if (_cart.isEmpty || _isCheckingOut) return;
+    final selection = await showCheckoutDialog(context, total: _total);
+    if (selection == null || !mounted) return;
+    setState(() => _isCheckingOut = true);
+    try {
+      await _checkoutService.checkout(
+        items: List<CartItem>.from(_cart),
+        discount: _discount,
+        paymentType: selection.paymentType,
+        customerName: selection.customerName,
+      );
+      if (!mounted) return;
+      final completedTotal = _total;
+      _clearBill();
+      await showCheckoutCompleteDialog(
+        context,
+        total: completedTotal,
+        onConfirm: () {},
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _isCheckingOut = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -327,13 +359,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
               );
               _clearBill();
             },
-            onCheckout: () {
-              showCheckoutCompleteDialog(
-                context,
-                total: _total,
-                onConfirm: _clearBill,
-              );
-            },
+            onCheckout: _isCheckingOut ? () {} : _checkout,
             onIncrement: (index) {
               setState(() {
                 _cart[index].quantity++;

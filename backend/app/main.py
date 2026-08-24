@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from app.db.session import async_session, engine
 from app.db.base import Base
-from app.routers import auth, inventory, invoices
+from app.routers import auth, inventory, invoices, khata, sales
 from app.services.auth import delete_expired_unverified_users
 
 logging.basicConfig(
@@ -15,6 +15,8 @@ logging.basicConfig(
 
 # Import models so Base.metadata picks them up
 import app.models.inventory  # noqa: F401
+import app.models.khata  # noqa: F401
+import app.models.sales  # noqa: F401
 import app.models.user  # noqa: F401
 
 
@@ -30,6 +32,12 @@ async def lifespan(app: FastAPI):
         )
         await conn.execute(
             text("ALTER TABLE users ADD COLUMN IF NOT EXISTS shop_type VARCHAR(120)")
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE sales ADD COLUMN IF NOT EXISTS "
+                "discount NUMERIC(20, 2) NOT NULL DEFAULT 0"
+            )
         )
 
     async def cleanup_loop():
@@ -53,6 +61,8 @@ app = FastAPI(title="DukaanOS", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router, prefix="/api")
 app.include_router(invoices.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
+app.include_router(khata.router, prefix="/api")
+app.include_router(sales.router, prefix="/api")
 
 
 @app.get("/health")

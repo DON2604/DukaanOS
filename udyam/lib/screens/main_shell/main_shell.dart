@@ -1,6 +1,7 @@
 import 'package:curved_labeled_navigation_bar/curved_navigation_bar.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/foreground_speech_service.dart';
 import '../inventory_screen/inventory_screen.dart';
 import '../khata_screen/khata_screen.dart';
 import '../more_screen/more_screen.dart';
@@ -21,14 +22,29 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   late int _selectedIndex;
   final GlobalKey<CurvedNavigationBarState> _navKey = GlobalKey();
+  final ForegroundSpeechService _speech = ForegroundSpeechService.instance;
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
+    WidgetsBinding.instance.addObserver(this);
+    _speech.setKhataActive(_selectedIndex == 3);
+    _speech.initialize();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _speech.setLifecycleState(state);
   }
 
   Widget _buildPage(int index) {
@@ -55,7 +71,9 @@ class _MainShellState extends State<MainShell> {
       bottomNavigationBar: MainBottomNav(
         navKey: _navKey,
         selectedIndex: _selectedIndex,
-        onTap: (index) {
+        onTap: (index) async {
+          await _speech.setKhataActive(index == 3);
+          if (!mounted) return;
           setState(() {
             _selectedIndex = index;
           });

@@ -14,6 +14,10 @@ class AppConstants {
   static const String analyzeInvoice = '/api/invoices/analyze';
   static const String inventory = '/api/inventory';
   static const String inventoryBulk = '/api/inventory/bulk';
+  static const String khataDashboard = '/api/khata/dashboard';
+  static const String khataTranscriptAnalyze = '/api/khata/transcripts/analyze';
+  static const String khataEntries = '/api/khata/entries';
+  static const String salesCheckout = '/api/sales/checkout';
 
   static const String sessionIdKey = 'session_id';
   static const String accessTokenKey = 'access_token';

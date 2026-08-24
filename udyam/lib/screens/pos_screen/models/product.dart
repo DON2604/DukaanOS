@@ -4,6 +4,7 @@ class Product {
   final String description;
   final double price;
   final String imageUrl;
+  final String? inventoryItemId;
 
   const Product({
     required this.barcode,
@@ -11,5 +12,6 @@ class Product {
     required this.description,
     required this.price,
     required this.imageUrl,
+    this.inventoryItemId,
   });
 }

@@ -1,5 +1,6 @@
 import re
 import unicodedata
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -8,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.inventory import InventoryItem
+from app.models.sales import InventoryMovement
 from app.schemas.inventory import InventoryBulkAddRequest
 
 
@@ -23,9 +25,31 @@ async def bulk_add_inventory(
     user_id,
     body: InventoryBulkAddRequest,
 ) -> list[InventoryItem]:
-    saved: list[InventoryItem] = []
+    if body.idempotency_key:
+        prior_ids = (
+            await db.execute(
+                select(InventoryMovement.inventory_item_id).where(
+                    InventoryMovement.user_id == user_id,
+                    InventoryMovement.reference_id == body.idempotency_key,
+                    InventoryMovement.movement_type == "purchase",
+                )
+            )
+        ).scalars().all()
+        if prior_ids:
+            existing = (
+                await db.execute(
+                    select(InventoryItem).where(
+                        InventoryItem.user_id == user_id,
+                        InventoryItem.id.in_(prior_ids),
+                    )
+                )
+            ).scalars().all()
+            return list(existing)
 
-    for item in body.items:
+    saved: list[InventoryItem] = []
+    movement_key = body.idempotency_key or uuid.uuid4()
+
+    for index, item in enumerate(body.items):
         normalized_name = normalize_product_text(item.name)
         normalized_unit = normalize_product_text(item.unit)
         supplier_name = item.supplier_name or body.supplier_name
@@ -78,7 +102,19 @@ async def bulk_add_inventory(
             },
         ).returning(InventoryItem)
         result = await db.execute(statement)
-        saved.append(result.scalar_one())
+        saved_item = result.scalar_one()
+        saved.append(saved_item)
+        db.add(
+            InventoryMovement(
+                user_id=user_id,
+                inventory_item_id=saved_item.id,
+                movement_type="purchase",
+                quantity_delta=item.quantity if item.quantity is not None else Decimal("0"),
+                unit_cost=item.purchase_unit_price,
+                idempotency_key=uuid.uuid5(movement_key, str(index)),
+                reference_id=movement_key,
+            )
+        )
 
     return saved
 
