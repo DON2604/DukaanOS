@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../widgets/glass_container.dart';
 import '../models/business_type.dart';
@@ -80,6 +81,7 @@ class _ShopProfileFormState extends State<ShopProfileForm> {
                 hintText: 'e.g. 123456789',
                 prefixIcon: Icons.telegram,
                 keyboardType: TextInputType.number,
+                suffix: _buildGetTelegramIdButton(),
               ),
             ],
           ),
@@ -158,6 +160,7 @@ class _ShopProfileFormState extends State<ShopProfileForm> {
     required String hintText,
     required IconData prefixIcon,
     TextInputType keyboardType = TextInputType.text,
+    Widget? suffix,
   }) {
     return TextField(
       controller: controller,
@@ -181,6 +184,7 @@ class _ShopProfileFormState extends State<ShopProfileForm> {
           child: Icon(prefixIcon, color: const Color(0xFF1F6F46), size: 22),
         ),
         prefixIconConstraints: const BoxConstraints(minWidth: 36),
+        suffixIcon: suffix,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -192,6 +196,37 @@ class _ShopProfileFormState extends State<ShopProfileForm> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFFB8490C), width: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGetTelegramIdButton() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            const url = 'https://t.me/userinfobot';
+            try {
+              await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            } catch (e) {
+              debugPrint('Error launching URL: $e');
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+            child: const Text(
+              'Get ID',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1F6F46),
+              ),
+            ),
+          ),
         ),
       ),
     );
