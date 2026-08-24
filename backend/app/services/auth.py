@@ -45,11 +45,20 @@ async def get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def request_otp(db: AsyncSession, phone: str) -> bool:
-    """Generate OTP, save it, and send via Telegram. Returns True on success."""
+async def get_user_by_telegram_chat_id(db: AsyncSession, telegram_chat_id: int) -> User | None:
+    result = await db.execute(select(User).where(User.telegram_chat_id == telegram_chat_id))
+    return result.scalar_one_or_none()
+
+
+async def request_otp(db: AsyncSession, phone: str) -> str:
+    """Generate OTP, save it, and send via Telegram.
+
+    Returns 'sent', 'not_found', or 'delivery_failed'.
+    Sign-in uses the telegram_chat_id already stored on the user.
+    """
     user = await get_user_by_phone(db, phone)
     if not user:
-        return False
+        return "not_found"
 
     code = _generate_otp()
     otp = OTP(phone=phone, code=code)
@@ -59,8 +68,8 @@ async def request_otp(db: AsyncSession, phone: str) -> bool:
     expires_at = otp.created_at + timedelta(seconds=settings.OTP_EXPIRE_SECONDS)
     logger.info("OTP sent request: phone=%s expires_at=%s (in %s seconds)", phone, expires_at, settings.OTP_EXPIRE_SECONDS)
     sent = await send_otp_via_telegram(user.telegram_chat_id, code)
-    logger.info("OTP delivery: phone=%s sent=%s", phone, sent)
-    return sent
+    logger.info("OTP delivery: phone=%s sent=%s telegram_chat_id=%s", phone, sent, user.telegram_chat_id)
+    return "sent" if sent else "delivery_failed"
 
 
 async def verify_otp(db: AsyncSession, phone: str, code: str) -> str | None:
