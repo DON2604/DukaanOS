@@ -1,6 +1,6 @@
 # DukaanOS
 
-**The zero-entry ERP for neighborhood shops.**
+**The zero-entry ERP for neighborhood shops made using fully open-source tech stack.**
 
 DukaanOS is a smartphone-first system for kirana stores, bakeries, vegetable shops, hardware stores, and similar small businesses. The shopkeeper should not type stock, bills, and customer credit into an ERP. The phone observes the counter — camera, microphone, and a short review step — and the ledger updates itself.
 
@@ -93,7 +93,7 @@ DukaanOS/
 
 - **On device:** scanning, listening, and queuing must work at the counter. Camera tabs are created only while selected so the invoice camera is not left running.
 - **On the server:** money, stock, and credit need one source of truth, idempotent writes, and a model that can read invoices and shop conversation.
-- **Telegram OTP:** shopkeepers already use Telegram; there is no SMS vendor in this stack.
+- **Telegram OTP:** shopkeepers already use Telegram; there is no SMS vendor in this stack as using this method is free of cost and fully open source.
 
 ---
 
