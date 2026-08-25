@@ -320,6 +320,12 @@ class _VoiceControlCard extends StatelessWidget {
       VoiceCaptureStatus.permissionDenied => 'Microphone permission denied',
       VoiceCaptureStatus.error => 'Voice capture needs attention',
     };
+
+    final bool hasError =
+        voice.status == VoiceCaptureStatus.error ||
+        voice.status == VoiceCaptureStatus.unavailable ||
+        voice.status == VoiceCaptureStatus.permissionDenied;
+
     return Card(
       color: const Color(0xFFFFF0E6),
       child: Padding(
@@ -331,13 +337,16 @@ class _VoiceControlCard extends StatelessWidget {
               children: [
                 Icon(
                   voice.consentGranted ? Icons.mic : Icons.mic_off,
-                  color: const Color(0xFFB8490C),
+                  color: hasError ? Colors.red : const Color(0xFFB8490C),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: hasError ? Colors.red : null,
+                    ),
                   ),
                 ),
                 Switch(
@@ -354,6 +363,12 @@ class _VoiceControlCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               children: [
+                if (hasError && voice.consentGranted)
+                  TextButton.icon(
+                    onPressed: () => _retryVoice(context),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
                 TextButton.icon(
                   onPressed: voice.consentGranted
                       ? () => voice.setManualPause(!voice.isPaused)
@@ -372,6 +387,22 @@ class _VoiceControlCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _retryVoice(BuildContext context) async {
+    // Force reinitialize the speech service
+    await voice.setConsent(false);
+    await Future.delayed(const Duration(milliseconds: 500));
+    await voice.setConsent(true);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Retrying voice initialization...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmClear(BuildContext context) async {

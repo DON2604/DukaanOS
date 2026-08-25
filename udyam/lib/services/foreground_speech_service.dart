@@ -64,13 +64,23 @@ class ForegroundSpeechService extends ChangeNotifier {
   bool get isPaused => _manualPause;
 
   Future<void> initialize() async {
-    if (_initialized) return;
+    if (_initialized) {
+      debugPrint('[VoiceService] Already initialized');
+      return;
+    }
+
+    debugPrint('[VoiceService] Initializing speech service...');
     _initialized = true;
+
     final preferences = await SharedPreferences.getInstance();
     consentGranted = preferences.getBool(_consentKey) ?? false;
     status = consentGranted
         ? VoiceCaptureStatus.paused
         : VoiceCaptureStatus.disabled;
+
+    debugPrint(
+      '[VoiceService] Consent granted: $consentGranted, initial status: $status',
+    );
     notifyListeners();
     await _reconcile();
   }
@@ -120,6 +130,9 @@ class ForegroundSpeechService extends ChangeNotifier {
   }
 
   Future<void> _reconcile() async {
+    debugPrint(
+      '[VoiceService] Reconciling: shouldListen=$shouldListen, status=$status, foreground=$_foreground, onKhata=$_onKhata, manualPause=$_manualPause',
+    );
     if (shouldListen) {
       await start();
     } else if (status != VoiceCaptureStatus.disabled) {
@@ -129,42 +142,84 @@ class ForegroundSpeechService extends ChangeNotifier {
   }
 
   Future<void> start() async {
-    if (!shouldListen || _subscription != null || _starting) return;
+    if (!shouldListen || _subscription != null || _starting) {
+      debugPrint(
+        '[VoiceService] Start blocked: shouldListen=$shouldListen, hasSubscription=${_subscription != null}, starting=$_starting',
+      );
+      return;
+    }
+
     _starting = true;
     status = VoiceCaptureStatus.checking;
     statusDetail = null;
     notifyListeners();
+    debugPrint('[VoiceService] Starting speech recognition...');
+
     try {
       if (!Platform.isAndroid) {
+        debugPrint(
+          '[VoiceService] Platform not supported: ${Platform.operatingSystem}',
+        );
         status = VoiceCaptureStatus.unavailable;
         statusDetail = 'Voice intelligence currently requires Android.';
         return;
       }
-      final permission = await Permission.microphone.request();
-      if (!permission.isGranted) {
-        status = VoiceCaptureStatus.permissionDenied;
-        statusDetail = 'Microphone permission is required.';
-        return;
+
+      // Check current permission status first
+      final currentStatus = await Permission.microphone.status;
+      debugPrint(
+        '[VoiceService] Current microphone permission: $currentStatus',
+      );
+
+      if (!currentStatus.isGranted) {
+        debugPrint('[VoiceService] Requesting microphone permission...');
+        final permission = await Permission.microphone.request();
+        debugPrint('[VoiceService] Permission request result: $permission');
+
+        if (!permission.isGranted) {
+          status = VoiceCaptureStatus.permissionDenied;
+          statusDetail = permission.isPermanentlyDenied
+              ? 'Microphone permission permanently denied. Enable in device Settings.'
+              : 'Microphone permission is required for voice features.';
+          debugPrint('[VoiceService] Permission denied: $statusDetail');
+          return;
+        }
       }
+
+      debugPrint(
+        '[VoiceService] Permission granted, checking ML Kit status...',
+      );
       final feature = await _recognizer.checkStatus();
+      debugPrint('[VoiceService] ML Kit status: $feature');
+
       if (!feature.toString().endsWith('.available')) {
+        debugPrint('[VoiceService] ML Kit not available, using fallback');
         await _startFallback();
         return;
       }
+
       _startedAt = DateTime.now().toUtc();
+      debugPrint('[VoiceService] Starting ML Kit recognition...');
       _subscription = _recognizer.startRecognition().listen(
-        _onPartial,
+        (text) {
+          debugPrint('[VoiceService] ML Kit recognized: $text');
+          _onPartial(text);
+        },
         onError: (Object error, StackTrace stack) {
+          debugPrint('[VoiceService] ML Kit error: $error');
           _subscription = null;
           unawaited(_startFallback(error));
         },
         onDone: () {
+          debugPrint('[VoiceService] ML Kit recognition done');
           _subscription = null;
           if (shouldListen) unawaited(_reconcile());
         },
       );
       status = VoiceCaptureStatus.listening;
-    } catch (error) {
+      debugPrint('[VoiceService] ML Kit recognition started successfully');
+    } catch (error, stack) {
+      debugPrint('[VoiceService] Start error: $error\n$stack');
       await _startFallback(error);
     } finally {
       _starting = false;
@@ -173,56 +228,109 @@ class ForegroundSpeechService extends ChangeNotifier {
   }
 
   Future<void> _startFallback([Object? mlKitError]) async {
-    if (!shouldListen) return;
-    _usingFallback = true;
-    if (!_fallbackInitialized) {
-      _fallbackInitialized = await _fallbackRecognizer.initialize(
-        onStatus: (value) {
-          if ((value == SpeechToText.doneStatus ||
-                  value == SpeechToText.notListeningStatus) &&
-              shouldListen &&
-              _usingFallback) {
-            Future<void>.delayed(
-              const Duration(milliseconds: 300),
-              _startFallback,
-            );
-          }
-        },
-        onError: (error) {
-          status = VoiceCaptureStatus.error;
-          statusDetail = 'On-device speech error: ${error.errorMsg}';
-          notifyListeners();
-        },
-      );
+    if (!shouldListen) {
+      debugPrint('[VoiceService] Fallback blocked: shouldListen=false');
+      return;
     }
+
+    debugPrint('[VoiceService] Starting fallback speech recognition...');
+    _usingFallback = true;
+
     if (!_fallbackInitialized) {
+      debugPrint('[VoiceService] Initializing fallback recognizer...');
+      try {
+        _fallbackInitialized = await _fallbackRecognizer.initialize(
+          onStatus: (value) {
+            debugPrint('[VoiceService] Fallback status: $value');
+            if ((value == SpeechToText.doneStatus ||
+                    value == SpeechToText.notListeningStatus) &&
+                shouldListen &&
+                _usingFallback) {
+              debugPrint('[VoiceService] Fallback ended, restarting...');
+              Future<void>.delayed(
+                const Duration(milliseconds: 300),
+                _startFallback,
+              );
+            }
+          },
+          onError: (error) {
+            debugPrint('[VoiceService] Fallback error: ${error.errorMsg}');
+            status = VoiceCaptureStatus.error;
+            statusDetail = 'Speech recognition error: ${error.errorMsg}';
+            notifyListeners();
+          },
+        );
+        debugPrint(
+          '[VoiceService] Fallback initialized: $_fallbackInitialized',
+        );
+      } catch (e, stack) {
+        debugPrint('[VoiceService] Fallback initialization error: $e\n$stack');
+        _fallbackInitialized = false;
+      }
+    }
+
+    if (!_fallbackInitialized) {
+      debugPrint('[VoiceService] Fallback initialization failed');
       status = VoiceCaptureStatus.unavailable;
-      statusDetail = 'On-device speech recognition is not available.';
+      statusDetail = 'Speech recognition is not available on this device.';
       notifyListeners();
       return;
     }
-    if (_fallbackRecognizer.isListening) return;
-    final locale = await _fallbackRecognizer.systemLocale();
-    await _fallbackRecognizer.listen(
-      onResult: (result) => _onPartial(result.recognizedWords),
-      listenOptions: SpeechListenOptions(
-        localeId: locale?.localeId,
-        partialResults: true,
-        onDevice: true,
-        cancelOnError: false,
-        listenMode: ListenMode.dictation,
-        pauseFor: const Duration(seconds: 4),
-        listenFor: const Duration(minutes: 5),
-      ),
-    );
-    status = VoiceCaptureStatus.listening;
-    statusDetail = mlKitError == null
-        ? 'Using Android on-device speech recognition.'
-        : 'ML Kit alpha is unavailable; using the on-device fallback.';
-    notifyListeners();
+
+    if (_fallbackRecognizer.isListening) {
+      debugPrint('[VoiceService] Fallback already listening');
+      return;
+    }
+
+    try {
+      // Check permission for fallback too
+      final hasPermission = await _fallbackRecognizer.hasPermission;
+      debugPrint('[VoiceService] Fallback has permission: $hasPermission');
+
+      if (!hasPermission) {
+        status = VoiceCaptureStatus.permissionDenied;
+        statusDetail = 'Microphone permission denied for speech recognition.';
+        notifyListeners();
+        return;
+      }
+
+      final locale = await _fallbackRecognizer.systemLocale();
+      debugPrint('[VoiceService] System locale: ${locale?.localeId}');
+
+      await _fallbackRecognizer.listen(
+        onResult: (result) {
+          debugPrint(
+            '[VoiceService] Fallback result: ${result.recognizedWords}',
+          );
+          _onPartial(result.recognizedWords);
+        },
+        listenOptions: SpeechListenOptions(
+          localeId: locale?.localeId,
+          partialResults: true,
+          onDevice: true,
+          cancelOnError: false,
+          listenMode: ListenMode.dictation,
+          pauseFor: const Duration(seconds: 4),
+          listenFor: const Duration(minutes: 5),
+        ),
+      );
+
+      status = VoiceCaptureStatus.listening;
+      statusDetail = mlKitError == null
+          ? 'Using on-device speech recognition.'
+          : 'ML Kit unavailable, using fallback speech recognition.';
+      debugPrint('[VoiceService] Fallback listening started: $statusDetail');
+      notifyListeners();
+    } catch (e, stack) {
+      debugPrint('[VoiceService] Fallback listen error: $e\n$stack');
+      status = VoiceCaptureStatus.error;
+      statusDetail = 'Failed to start speech recognition: $e';
+      notifyListeners();
+    }
   }
 
   void _onPartial(String partial) {
+    debugPrint('[VoiceService] Partial transcript: "$partial"');
     if (!_buffer.add(partial)) return;
     _startedAt ??= DateTime.now().toUtc();
     _sealTimer?.cancel();
