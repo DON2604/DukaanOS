@@ -15,6 +15,8 @@ from app.schemas.khata import (
     KhataDashboard,
 )
 from app.services.khata import entry_response
+from app.services.restock import sync_inventory_intelligence
+from app.services.scoring import calculate_customer_score
 
 
 ZERO = Decimal("0")
@@ -76,14 +78,41 @@ async def build_dashboard(db: AsyncSession, user_id: uuid.UUID) -> KhataDashboar
         .group_by(Customer.id)
         .order_by(func.sum(signed_amount).desc(), Customer.name.asc())
     )
-    customer_balances = [
-        CustomerBalance(
-            customer=CustomerResponse.model_validate(customer),
-            balance=balance,
+
+    all_customer_entries = (
+        await db.execute(
+            select(KhataEntry).where(
+                KhataEntry.user_id == user_id, KhataEntry.is_deleted.is_(False)
+            )
         )
-        for customer, balance in balances_result.all()
-        if balance != 0
-    ]
+    ).scalars()
+    entries_by_customer: dict[uuid.UUID, list[KhataEntry]] = {}
+    for entry in all_customer_entries:
+        entries_by_customer.setdefault(entry.customer_id, []).append(entry)
+
+    customer_balances: list[CustomerBalance] = []
+    for customer, balance in balances_result.all():
+        if balance != 0:
+            c_entries = entries_by_customer.get(customer.id, [])
+            score_result = calculate_customer_score(c_entries, balance)
+            customer_balances.append(
+                CustomerBalance(
+                    customer=CustomerResponse.model_validate(customer),
+                    balance=balance,
+                    score=score_result.score,
+                    category=score_result.category,
+                    trust_label=score_result.trust_label,
+                    payment_count=score_result.payment_count,
+                    credit_count=score_result.credit_count,
+                    total_credit=score_result.total_credit,
+                    total_paid=score_result.total_paid,
+                    repayment_rate=score_result.repayment_rate,
+                    payment_probability_pct=score_result.payment_probability_pct,
+                    payment_probability_label=score_result.payment_probability_label,
+                    credit_recommendation=score_result.credit_recommendation,
+                    reasons=score_result.reasons,
+                )
+            )
     receivables = sum(
         (row.balance for row in customer_balances if row.balance > 0), ZERO
     )
@@ -128,4 +157,5 @@ async def build_dashboard(db: AsyncSession, user_id: uuid.UUID) -> KhataDashboar
             )
             for batch in batches
         ],
+        restock_alerts=await sync_inventory_intelligence(db, user_id),
     )

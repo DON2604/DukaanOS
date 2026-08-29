@@ -44,13 +44,13 @@ _TRANSCRIPT_PROMPT = """You analyze multilingual Indian shop conversation transc
   "language": string|null,
   "insights": [string],
   "obligations": [{
-    "person": string,
+    "person": string|null,
     "amount": number|null,
     "item": string|null,
     "quantity": number|null,
     "type": "credit"|"payment"|"promise"|"ambiguous",
     "due_date": "YYYY-MM-DD"|null,
-    "evidence": string,
+    "evidence": string|null,
     "confidence": number
   }]
 }

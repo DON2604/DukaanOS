@@ -112,55 +112,140 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ],
       );
     }
-    return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-      itemCount: _items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = _items[index];
-        return Card(
-          color: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                  ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 720;
+        final pagePad = wide ? 24.0 : 16.0;
+        final innerWidth = constraints.maxWidth - pagePad * 2;
+        final expiring = _items
+            .where((item) => (item.daysUntilExpiry ?? 99) <= 5)
+            .length;
+        return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(pagePad, 8, pagePad, 28),
+          children: [
+            if (expiring > 0)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE8E0),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${_number(item.quantity)} ${item.unit} in stock',
+                child: Text(
+                  '$expiring item${expiring == 1 ? '' : 's'} auto-detected as near expiry',
                   style: const TextStyle(
-                    color: Color(0xFF2F6D3A),
                     fontWeight: FontWeight.w600,
+                    color: Color(0xFFB8490C),
                   ),
                 ),
-                const Divider(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Purchase: ${_money(item.purchaseUnitPrice)}'),
-                    Text('Selling: ${_money(item.sellingPrice)}'),
-                  ],
-                ),
-                if (item.supplierName != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Supplier: ${item.supplierName}',
-                    style: const TextStyle(color: Color(0xFF6C625C)),
-                  ),
-                ],
-              ],
+              ),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _items
+                  .map(
+                    (item) => SizedBox(
+                      width: wide ? (innerWidth - 12) / 2 : innerWidth,
+                      child: _inventoryCard(item),
+                    ),
+                  )
+                  .toList(),
             ),
-          ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _inventoryCard(InventoryItem item) {
+    final days = item.daysUntilExpiry;
+    Color? badgeColor;
+    String? badge;
+    if (days != null) {
+      if (days < 0) {
+        badge = 'Expired';
+        badgeColor = const Color(0xFFC62828);
+      } else if (days <= 2) {
+        badge = 'Expires in $days d';
+        badgeColor = const Color(0xFFC62828);
+      } else if (days <= 7) {
+        badge = 'Expires in $days d';
+        badgeColor = const Color(0xFFE65100);
+      }
+    }
+    return Card(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (badge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor!.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      badge,
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${_number(item.quantity)} ${item.unit} in stock',
+              style: const TextStyle(
+                color: Color(0xFF2F6D3A),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (item.category != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${item.category}${item.shelfLifeDays == null ? '' : ' · ${item.shelfLifeDays} day shelf life'}',
+                style: const TextStyle(color: Color(0xFF6C625C), fontSize: 12),
+              ),
+            ],
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(child: Text('Purchase: ${_money(item.purchaseUnitPrice)}')),
+                Flexible(child: Text('Selling: ${_money(item.sellingPrice)}')),
+              ],
+            ),
+            if (item.supplierName != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Supplier: ${item.supplierName}',
+                style: const TextStyle(color: Color(0xFF6C625C)),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

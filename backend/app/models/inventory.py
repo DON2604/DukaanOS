@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +44,12 @@ class InventoryItem(Base):
     line_total: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
     supplier_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     invoice_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_received_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
@@ -66,6 +66,10 @@ class InventoryItemResponse(BaseModel):
     line_total: Decimal | None
     supplier_name: str | None
     invoice_number: str | None
+    category: str | None = None
+    shelf_life_days: int | None = None
+    last_received_at: datetime | None = None
+    expires_at: datetime | date | None = None
     created_at: datetime
     updated_at: datetime
 

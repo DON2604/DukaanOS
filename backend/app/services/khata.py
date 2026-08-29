@@ -82,11 +82,12 @@ def is_explicit_valid_obligation(obligation, transcript: str | None = None) -> b
         obligation.type in {"credit", "payment"}
         and obligation.amount is not None
         and obligation.amount > 0
-        and bool(obligation.person.strip())
+        and bool(obligation.person and obligation.person.strip())
+        and bool(obligation.evidence and obligation.evidence.strip())
         and obligation.confidence >= AUTO_CREATE_CONFIDENCE
     )
     if transcript is not None:
-        evidence = normalize_product_text(obligation.evidence)
+        evidence = normalize_product_text(obligation.evidence or "")
         valid = valid and bool(evidence) and evidence in normalize_product_text(transcript)
     return valid
 

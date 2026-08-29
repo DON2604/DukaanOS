@@ -15,6 +15,9 @@ class InventoryItem {
     this.supplierName,
     this.invoiceNumber,
     this.updatedAt,
+    this.category,
+    this.shelfLifeDays,
+    this.expiresAt,
   });
 
   final String id;
@@ -27,6 +30,14 @@ class InventoryItem {
   final String? supplierName;
   final String? invoiceNumber;
   final DateTime? updatedAt;
+  final String? category;
+  final int? shelfLifeDays;
+  final DateTime? expiresAt;
+
+  int? get daysUntilExpiry {
+    if (expiresAt == null) return null;
+    return expiresAt!.toLocal().difference(DateTime.now()).inDays;
+  }
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
     return InventoryItem(
@@ -40,6 +51,11 @@ class InventoryItem {
       supplierName: json['supplier_name']?.toString(),
       invoiceNumber: json['invoice_number']?.toString(),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      category: json['category']?.toString(),
+      shelfLifeDays: json['shelf_life_days'] is num
+          ? (json['shelf_life_days'] as num).toInt()
+          : int.tryParse(json['shelf_life_days']?.toString() ?? ''),
+      expiresAt: DateTime.tryParse(json['expires_at']?.toString() ?? ''),
     );
   }
 }

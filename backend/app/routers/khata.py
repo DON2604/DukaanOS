@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.services.gemini import (
     GeminiResponseError,
     GeminiUpstreamError,
 )
+from app.services.notifications import notify_restock_if_needed
 from app.services.khata import (
     batch_response,
     entry_response,
@@ -40,10 +41,19 @@ router = APIRouter(prefix="/khata", tags=["khata"])
 
 @router.get("/dashboard", response_model=KhataDashboard)
 async def dashboard(
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> KhataDashboard:
-    return await build_dashboard(db, current_user.id)
+    data = await build_dashboard(db, current_user.id)
+    await db.commit()
+    background_tasks.add_task(
+        notify_restock_if_needed,
+        current_user.id,
+        current_user.telegram_chat_id,
+        data.restock_alerts,
+    )
+    return data
 
 
 @router.post("/transcripts/analyze", response_model=TranscriptAnalyzeResponse)

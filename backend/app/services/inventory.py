@@ -68,6 +68,7 @@ async def bulk_add_inventory(
             line_total=item.line_total,
             supplier_name=supplier_name,
             invoice_number=invoice_number,
+            last_received_at=now,
             created_at=now,
             updated_at=now,
         )
@@ -98,11 +99,15 @@ async def bulk_add_inventory(
                     excluded.invoice_number,
                     InventoryItem.invoice_number,
                 ),
+                "last_received_at": now,
                 "updated_at": now,
             },
         ).returning(InventoryItem)
         result = await db.execute(statement)
         saved_item = result.scalar_one()
+        from app.services.restock import apply_item_metadata
+
+        apply_item_metadata(saved_item)
         saved.append(saved_item)
         db.add(
             InventoryMovement(

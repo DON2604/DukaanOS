@@ -45,11 +45,30 @@ void main() {
       'recent_entries': [
         {'id': 'e1', 'entry_type': 'sale', 'total': 250},
       ],
+      'restock_alerts': [
+        {
+          'item_name': 'Aashirvaad Atta',
+          'unit': 'bags',
+          'current_stock': 4,
+          'days_until_stockout': 3,
+          'suggested_restock_qty': 20,
+          'severity': 'critical',
+          'message': 'Aashirvaad Atta is running out',
+          'alert_type': 'restock',
+          'days_until_expiry': 80,
+          'perishable': false,
+        },
+      ],
     });
 
     expect(dashboard.summary.totalSales, 1200);
     expect(dashboard.summary.totalPurchases, 500.5);
     expect(dashboard.insights.first.message, 'Sales are rising');
+    expect(dashboard.restockAlerts.single.itemName, 'Aashirvaad Atta');
+    expect(
+      dashboard.insights.any((item) => item.message.contains('running out')),
+      isTrue,
+    );
     expect(
       dashboard.insights.any((item) => item.message.contains('Ravi')),
       isTrue,

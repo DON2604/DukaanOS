@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'screens/app_startup/app_startup_screen.dart';
+import 'services/restock_notification_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await RestockNotificationService.instance.init();
   runApp(const UdyamApp());
 }
 

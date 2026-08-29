@@ -12,14 +12,118 @@ from app.models.sales import InventoryMovement, Sale, SaleLine
 from app.schemas.khata import TranscriptExtraction
 from app.schemas.sales import CheckoutRequest
 from app.services.gemini import GeminiResponseError, parse_transcript_response
+from app.services.notifications import format_restock_telegram
 from app.services.analytics import build_dashboard
+from app.services.scoring import calculate_customer_score
 from app.services.khata import (
     AUTO_CREATE_CONFIDENCE,
     is_explicit_valid_obligation,
     persist_extraction,
     process_transcript,
 )
+from app.services.restock import classify_item
 from app.services.sales import checkout
+
+
+class CustomerScoringTests(unittest.TestCase):
+    def test_good_customer_with_perfect_payment_history(self):
+        user_id = uuid.uuid4()
+        customer_id = uuid.uuid4()
+        entries = [
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="credit",
+                amount=Decimal("500.00"),
+            ),
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="payment",
+                amount=Decimal("500.00"),
+            ),
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="credit",
+                amount=Decimal("1000.00"),
+            ),
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="payment",
+                amount=Decimal("1000.00"),
+            ),
+        ]
+        score_res = calculate_customer_score(entries, Decimal("0.00"))
+        self.assertEqual(score_res.category, "good")
+        self.assertGreaterEqual(score_res.score, 85)
+        self.assertGreaterEqual(score_res.payment_probability_pct, 85)
+        self.assertEqual(score_res.payment_count, 2)
+        self.assertEqual(score_res.credit_count, 2)
+        self.assertEqual(score_res.repayment_rate, Decimal("100"))
+
+    def test_bad_customer_with_zero_payments(self):
+        user_id = uuid.uuid4()
+        customer_id = uuid.uuid4()
+        entries = [
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="credit",
+                amount=Decimal("800.00"),
+            ),
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="credit",
+                amount=Decimal("1200.00"),
+            ),
+        ]
+        score_res = calculate_customer_score(entries, Decimal("2000.00"))
+        self.assertEqual(score_res.category, "bad")
+        self.assertLess(score_res.score, 50)
+        self.assertLess(score_res.payment_probability_pct, 50)
+        self.assertEqual(score_res.payment_count, 0)
+        self.assertEqual(score_res.credit_count, 2)
+        self.assertEqual(score_res.repayment_rate, Decimal("0"))
+
+    def test_moderate_customer_with_partial_payment(self):
+        user_id = uuid.uuid4()
+        customer_id = uuid.uuid4()
+        entries = [
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="credit",
+                amount=Decimal("1000.00"),
+            ),
+            KhataEntry(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                customer_id=customer_id,
+                entry_type="payment",
+                amount=Decimal("600.00"),
+            ),
+        ]
+        score_res = calculate_customer_score(entries, Decimal("400.00"))
+        self.assertEqual(score_res.category, "moderate")
+        self.assertTrue(50 <= score_res.score < 75)
+        self.assertEqual(score_res.repayment_rate, Decimal("60.00"))
+
+    def test_new_customer_neutral_scoring(self):
+        score_res = calculate_customer_score([], Decimal("0.00"))
+        self.assertEqual(score_res.category, "moderate")
+        self.assertEqual(score_res.score, 70)
+        self.assertEqual(score_res.payment_count, 0)
+        self.assertEqual(score_res.credit_count, 0)
 
 
 class TranscriptParsingTests(unittest.TestCase):
@@ -71,6 +175,8 @@ class TranscriptParsingTests(unittest.TestCase):
             {"amount": None},
             {"type": "promise"},
             {"confidence": Decimal("0.69")},
+            {"person": None},
+            {"evidence": None},
         ):
             obligation = TranscriptExtraction.model_validate(
                 {"obligations": [{**base, **change}]}
@@ -116,7 +222,13 @@ class _FakeSession:
         self.flush_count = 0
 
     async def execute(self, _statement):
+        if not self.execute_values:
+            return _Result([])
         return _Result(self.execute_values.pop(0))
+
+    def add_all(self, values):
+        for value in values:
+            self.add(value)
 
     def add(self, value):
         if getattr(value, "id", None) is None:
@@ -256,6 +368,7 @@ class DashboardAnalyticsTests(unittest.IsolatedAsyncioTestCase):
                 Decimal("200"),
                 Decimal("40"),
                 [(debtor, Decimal("30")), (prepaid, Decimal("-5"))],
+                [entry],
                 [(entry, debtor.name)],
                 [batch],
             ]
@@ -274,8 +387,42 @@ class DashboardAnalyticsTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             set(dashboard.model_dump()),
-            {"summary", "customer_balances", "recent_entries", "insights"},
+            {
+                "summary",
+                "customer_balances",
+                "recent_entries",
+                "insights",
+                "restock_alerts",
+            },
         )
+        self.assertTrue(dashboard.restock_alerts)
+        self.assertTrue(
+            any(alert.severity == "critical" for alert in dashboard.restock_alerts)
+        )
+        self.assertTrue(
+            any(
+                "running out" in alert.message.lower()
+                or "expir" in alert.message.lower()
+                for alert in dashboard.restock_alerts
+            )
+        )
+        self.assertGreater(len(dashboard.restock_alerts[0].trend), 1)
+        telegram_text = format_restock_telegram(dashboard.restock_alerts)
+        self.assertIsNotNone(telegram_text)
+        self.assertIn("Aashirvaad Atta", telegram_text)
+        self.assertIn("restock", telegram_text.lower())
+
+
+class ItemIntelligenceTests(unittest.TestCase):
+    def test_classifies_perishable_dairy_and_staples(self):
+        milk = classify_item("Amul Taaza Milk")
+        self.assertEqual(milk.category, "dairy")
+        self.assertTrue(milk.perishable)
+        self.assertEqual(milk.shelf_life_days, 3)
+
+        atta = classify_item("Aashirvaad Atta 10kg")
+        self.assertEqual(atta.category, "staples")
+        self.assertFalse(atta.perishable)
 
 
 class CheckoutContractTests(unittest.TestCase):

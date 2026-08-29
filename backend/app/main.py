@@ -14,6 +14,7 @@ logging.basicConfig(
 )
 
 # Import models so Base.metadata picks them up
+import app.models.intelligence  # noqa: F401
 import app.models.inventory  # noqa: F401
 import app.models.khata  # noqa: F401
 import app.models.sales  # noqa: F401
@@ -38,6 +39,27 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE sales ADD COLUMN IF NOT EXISTS "
                 "discount NUMERIC(20, 2) NOT NULL DEFAULT 0"
             )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS "
+                "category VARCHAR(40)"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS "
+                "shelf_life_days INTEGER"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS "
+                "last_received_at TIMESTAMPTZ"
+            )
+        )
+        await conn.execute(
+            text("ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS expires_at DATE")
         )
 
     async def cleanup_loop():
