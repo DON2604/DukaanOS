@@ -32,6 +32,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   bool _isCameraInitialized = false;
   bool _isFlashOn = false;
   bool _isProcessing = false;
+  bool _isImageScanMode = false; // New field for scan mode toggle
   DateTime? _lastScanTime;
   String _scannerStatus = "Point at barcode to scan";
   String? _lastScannedBadge;
@@ -121,7 +122,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     if (_cameraController == null) return;
 
     _cameraController!.startImageStream((CameraImage image) async {
-      if (_isProcessing) return;
+      // Only process barcodes in barcode scan mode
+      if (_isProcessing || _isImageScanMode) return;
 
       final now = DateTime.now();
       if (_lastScanTime != null &&
@@ -160,6 +162,19 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       } finally {
         _isProcessing = false;
       }
+    });
+  }
+
+  void _toggleScanMode() {
+    setState(() {
+      _isImageScanMode = !_isImageScanMode;
+      if (_isImageScanMode) {
+        _scannerStatus =
+            "Image scan mode - capture photos to identify products";
+      } else {
+        _scannerStatus = "Point at barcode to scan";
+      }
+      _lastScannedBadge = null;
     });
   }
 
@@ -345,6 +360,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
             isCameraInitialized: _isCameraInitialized,
             scannerStatus: _scannerStatus,
             lastScannedBadge: _lastScannedBadge,
+            isImageScanMode: _isImageScanMode,
+            onToggleScanMode: _toggleScanMode,
+            onProductIdentified: _addProductToCart,
           );
           final cart = CartColumn(
             cart: _cart,

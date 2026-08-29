@@ -1,14 +1,56 @@
+import re
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
-from typing import Annotated, Literal
+from decimal import Decimal, InvalidOperation
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 InsightText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
 ]
+
+_OBLIGATION_TYPES = {"credit", "payment", "promise", "ambiguous"}
+_NUMBER_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _clean_text(value: Any, limit: int) -> str | None:
+    """Coerce a model-supplied value to a trimmed, length-capped string or None."""
+    if value is None or isinstance(value, bool):
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    stripped = value.strip()
+    return stripped[:limit] if stripped else None
+
+
+def _clean_number(value: Any) -> Decimal | None:
+    """Coerce a model-supplied value to a finite Decimal, or None if unusable."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        match = _NUMBER_PATTERN.search(value.replace(",", ""))
+        if match is None:
+            return None
+        value = match.group(0)
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return number if number.is_finite() else None
+
+
+def _clean_positive(value: Any) -> Decimal | None:
+    number = _clean_number(value)
+    return number if number is not None and number > 0 else None
 
 
 class CustomerCreate(BaseModel):
@@ -86,28 +128,114 @@ class TranscriptAnalyzeRequest(BaseModel):
 
 
 class TranscriptObligation(BaseModel):
+    """A single obligation as reported by the LLM.
+
+    Parsing is deliberately lenient: anything the model gets wrong is degraded to a
+    safe value (None, or type "ambiguous") rather than raising, because a single bad
+    field would otherwise discard the whole transcript batch. Nothing here decides
+    what gets written to the khata -- `is_explicit_valid_obligation` is the gate, and
+    it re-checks every field it depends on.
+    """
+
     person: str | None = Field(default=None, max_length=200)
     amount: Decimal | None = Field(default=None, gt=0)
     item: str | None = Field(default=None, max_length=300)
     quantity: Decimal | None = Field(default=None, gt=0)
-    type: Literal["credit", "payment", "promise", "ambiguous"]
+    type: Literal["credit", "payment", "promise", "ambiguous"] = "ambiguous"
     due_date: date | None = None
     evidence: str | None = Field(default=None, max_length=500)
-    confidence: Decimal = Field(ge=0, le=1)
+    confidence: Decimal = Field(default=Decimal(0), ge=0, le=1)
 
-    @field_validator("person", "item", "evidence")
+    @field_validator("person", mode="before")
     @classmethod
-    def strip_strings(cls, value: str | None) -> str | None:
-        if value is None:
+    def clean_person(cls, value: Any) -> str | None:
+        return _clean_text(value, 200)
+
+    @field_validator("item", mode="before")
+    @classmethod
+    def clean_item(cls, value: Any) -> str | None:
+        return _clean_text(value, 300)
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def clean_evidence(cls, value: Any) -> str | None:
+        return _clean_text(value, 500)
+
+    @field_validator("amount", "quantity", mode="before")
+    @classmethod
+    def clean_positive_amounts(cls, value: Any) -> Decimal | None:
+        return _clean_positive(value)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def clean_type(cls, value: Any) -> str:
+        if isinstance(value, str) and value.strip().lower() in _OBLIGATION_TYPES:
+            return value.strip().lower()
+        # Never guess a direction from an unrecognised label.
+        return "ambiguous"
+
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def clean_due_date(cls, value: Any) -> date | None:
+        if value is None or isinstance(value, date):
+            return value
+        if not isinstance(value, str):
             return None
-        stripped = value.strip()
-        return stripped if stripped else None
+        try:
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError:
+            return None
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def clean_confidence(cls, value: Any) -> Decimal:
+        number = _clean_number(value)
+        if number is None or number <= 0:
+            return Decimal(0)
+        if number > 1:
+            # Models sometimes answer on a 0-100 scale.
+            number = number / 100 if number <= 100 else Decimal(1)
+        return min(number, Decimal(1))
 
 
 class TranscriptExtraction(BaseModel):
     language: str | None = Field(default=None, max_length=40)
     insights: list[InsightText] = Field(default_factory=list, max_length=10)
     obligations: list[TranscriptObligation] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def salvage_payload(cls, data: Any) -> Any:
+        """Drop unusable list entries instead of failing the whole extraction."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["language"] = _clean_text(data.get("language"), 40)
+
+        raw_insights = data.get("insights")
+        insights: list[str] = []
+        if isinstance(raw_insights, list):
+            for item in raw_insights:
+                text = _clean_text(item, 300)
+                if text:
+                    insights.append(text)
+        data["insights"] = insights[:10]
+
+        raw_obligations = data.get("obligations")
+        obligations: list[TranscriptObligation] = []
+        if isinstance(raw_obligations, list):
+            for item in raw_obligations[:100]:
+                if isinstance(item, TranscriptObligation):
+                    obligations.append(item)
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    obligations.append(TranscriptObligation.model_validate(item))
+                except ValidationError:
+                    continue
+        data["obligations"] = obligations
+        return data
 
 
 class InsightBatchResponse(BaseModel):

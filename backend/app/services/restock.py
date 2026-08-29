@@ -254,7 +254,6 @@ def build_item_alerts(
 
 
 def _demo_catalog() -> list[dict]:
-    now = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
     return [
         {
             "name": "Aashirvaad Atta",

@@ -1,6 +1,6 @@
 import unittest
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -148,13 +148,46 @@ class TranscriptParsingTests(unittest.TestCase):
         self.assertEqual(result.obligations[0].amount, Decimal("500"))
         self.assertEqual(result.obligations[0].item, "चावल")
 
-    def test_rejects_invalid_obligation_type(self):
-        with self.assertRaises(GeminiResponseError):
-            parse_transcript_response(
-                '{"language":"hi","insights":[],"obligations":[{"person":"A",'
-                '"amount":10,"item":null,"quantity":null,"type":"guess",'
-                '"due_date":null,"evidence":"x","confidence":1}]}'
-            )
+    def test_unknown_obligation_type_degrades_to_ambiguous(self):
+        result = parse_transcript_response(
+            '{"language":"hi","insights":[],"obligations":[{"person":"A",'
+            '"amount":10,"item":null,"quantity":null,"type":"guess",'
+            '"due_date":null,"evidence":"x","confidence":1}]}'
+        )
+        obligation = result.obligations[0]
+        self.assertEqual(obligation.type, "ambiguous")
+        self.assertFalse(is_explicit_valid_obligation(obligation))
+
+    def test_malformed_fields_do_not_discard_the_batch(self):
+        result = parse_transcript_response(
+            """{"language":"hinglish","insights":["Ravi ne udhaar liya","","  "],
+            "obligations":[
+              {"person":null,"amount":0,"type":null,"confidence":null,
+               "due_date":"next Monday","evidence":"  "},
+              {"person":"Ravi","amount":"1,500","item":"rice","quantity":"2 kg",
+               "type":"CREDIT ","due_date":"2026-09-01T00:00:00",
+               "evidence":"Ravi ke 1500 baki","confidence":95},
+              "not an object"
+            ]}"""
+        )
+        self.assertEqual(result.insights, ["Ravi ne udhaar liya"])
+        self.assertEqual(len(result.obligations), 2)
+
+        dropped, kept = result.obligations
+        self.assertIsNone(dropped.person)
+        self.assertIsNone(dropped.amount)
+        self.assertIsNone(dropped.due_date)
+        self.assertIsNone(dropped.evidence)
+        self.assertEqual(dropped.type, "ambiguous")
+        self.assertEqual(dropped.confidence, Decimal("0"))
+        self.assertFalse(is_explicit_valid_obligation(dropped))
+
+        self.assertEqual(kept.amount, Decimal("1500"))
+        self.assertEqual(kept.quantity, Decimal("2"))
+        self.assertEqual(kept.type, "credit")
+        self.assertEqual(kept.due_date, date(2026, 9, 1))
+        self.assertEqual(kept.confidence, Decimal("0.95"))
+        self.assertTrue(is_explicit_valid_obligation(kept))
 
     def test_only_explicit_high_confidence_amounts_are_auto_created(self):
         base = {

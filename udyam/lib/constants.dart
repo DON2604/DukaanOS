@@ -1,7 +1,7 @@
 class AppConstants {
   /// Change this host/port when the backend moves. Route paths stay the same.
 
-  static const String apiBaseUrl = 'http://10.79.210.28:8000';
+  static const String apiBaseUrl = 'http://10.194.206.22:8000';
 
   static const String createAccount = '/api/auth/create-account';
   static const String createAccountRequestOtp =
@@ -14,6 +14,11 @@ class AppConstants {
   static const String analyzeInvoice = '/api/invoices/analyze';
   static const String inventory = '/api/inventory';
   static const String inventoryBulk = '/api/inventory/bulk';
+  static const String inventoryDeduct = '/api/inventory/deduct';
+  static const String imageRecognitionAnalyze =
+      '/api/image-recognition/analyze';
+  static const String imageRecognitionMatch =
+      '/api/image-recognition/match-inventory';
   static const String khataDashboard = '/api/khata/dashboard';
   static const String khataTranscriptAnalyze = '/api/khata/transcripts/analyze';
   static const String khataEntries = '/api/khata/entries';

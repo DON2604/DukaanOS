@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import math
 import re
 from decimal import Decimal
 from typing import Any
@@ -70,8 +71,34 @@ class GeminiUpstreamError(RuntimeError):
     pass
 
 
+class GeminiRateLimitError(GeminiUpstreamError):
+    """Gemini returned 429. `retry_after` is seconds, when the API reported it.
+
+    Subclasses GeminiUpstreamError so existing `except GeminiUpstreamError`
+    handlers keep working; callers that want to send Retry-After catch this.
+    """
+
+    def __init__(self, message: str, retry_after: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class GeminiResponseError(RuntimeError):
     pass
+
+
+_RETRY_AFTER_PATTERN = re.compile(r"retry in (\d+(?:\.\d+)?)s", re.IGNORECASE)
+
+
+def _retry_after_seconds(response: httpx.Response) -> int | None:
+    """Pull a retry delay out of a 429, preferring the header over the message."""
+    header = response.headers.get("retry-after")
+    if header and header.strip().isdigit():
+        return int(header.strip())
+    match = _RETRY_AFTER_PATTERN.search(response.text[:1000])
+    if match:
+        return max(1, math.ceil(float(match.group(1))))
+    return None
 
 
 def parse_invoice_response(text: str) -> InvoiceAnalysis:
@@ -106,7 +133,115 @@ def parse_invoice_response(text: str) -> InvoiceAnalysis:
         raise GeminiResponseError("Gemini returned invoice data in an invalid format") from exc
 
 
-def _json_object_from_response(text: str) -> dict:
+def _model_url() -> str:
+    model = quote(settings.GEMINI_MODEL.strip(), safe="-_.")
+    if not model:
+        raise GeminiConfigurationError("GEMINI_MODEL is not configured")
+    return (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent"
+    )
+
+
+def _candidate_api_keys() -> list[str]:
+    """Return Gemini API keys in priority order, skipping blanks and duplicates."""
+    keys: list[str] = []
+    for candidate in (
+        getattr(settings, "GEMINI_API_KEY", "") or "",
+        getattr(settings, "GEMINI_API_KEY_NEW", "") or "",
+    ):
+        cleaned = candidate.strip()
+        if cleaned and cleaned not in keys:
+            keys.append(cleaned)
+    if not keys:
+        raise GeminiConfigurationError("Gemini is not configured")
+    return keys
+
+
+async def _post_to_gemini(url: str, api_key: str, body: dict) -> httpx.Response:
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
+            return await client.post(
+                url, headers={"x-goog-api-key": api_key}, json=body
+            )
+    except httpx.TimeoutException as exc:
+        raise GeminiUpstreamError("Gemini timed out while analyzing") from exc
+    except httpx.HTTPError as exc:
+        raise GeminiUpstreamError("Could not contact Gemini") from exc
+
+
+async def request_gemini_json(parts: list[dict], subject: str) -> str:
+    """POST `parts` to Gemini and return the concatenated text of the first candidate.
+
+    `subject` names what is being analyzed ("the invoice", "the transcript") and is
+    only used to phrase errors surfaced to the caller.
+    """
+    url = _model_url()
+    body = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }
+    api_keys = _candidate_api_keys()
+    last_response = None
+
+    for index, api_key in enumerate(api_keys):
+        try:
+            response = await _post_to_gemini(url, api_key, body)
+        except GeminiUpstreamError:
+            if index == len(api_keys) - 1:
+                raise
+            continue
+
+        if response.is_error:
+            if response.status_code == 429:
+                retry_after = _retry_after_seconds(response)
+                logger.warning(
+                    "Gemini quota exhausted for %s with key %s; retry after %s",
+                    subject,
+                    api_key[-6:],
+                    f"{retry_after}s" if retry_after else "unknown delay",
+                )
+                last_response = response
+                if index < len(api_keys) - 1:
+                    continue
+                raise GeminiRateLimitError(
+                    "Gemini rate limit exceeded; try again later", retry_after
+                )
+
+            logger.warning(
+                "Gemini request for %s failed with status %s using key %s: %s",
+                subject, response.status_code, api_key[-6:], response.text[:200],
+            )
+            if response.status_code in (401, 403):
+                if index < len(api_keys) - 1:
+                    continue
+                raise GeminiConfigurationError("Gemini rejected the configured API key")
+            if index < len(api_keys) - 1:
+                continue
+            raise GeminiUpstreamError(f"Gemini could not analyze {subject}")
+
+        try:
+            data = response.json()
+            response_parts = data["candidates"][0]["content"]["parts"]
+            text = "".join(part.get("text", "") for part in response_parts)
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            logger.warning("Unexpected Gemini response: %s", response.text[:500])
+            raise GeminiResponseError("Gemini returned an unexpected response") from exc
+
+        if not text.strip():
+            raise GeminiResponseError(f"Gemini returned no data for {subject}")
+        return text
+
+    if last_response is not None and last_response.status_code == 429:
+        retry_after = _retry_after_seconds(last_response)
+        raise GeminiRateLimitError(
+            "Gemini rate limit exceeded; try again later", retry_after
+        )
+
+    raise GeminiUpstreamError(f"Gemini could not analyze {subject}")
+
+
+def json_object_from_response(text: str) -> dict:
     cleaned = text.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL | re.IGNORECASE)
     if fenced:
@@ -133,7 +268,7 @@ def _json_object_from_response(text: str) -> dict:
 
 def parse_transcript_response(text: str) -> TranscriptExtraction:
     try:
-        return TranscriptExtraction.model_validate(_json_object_from_response(text))
+        return TranscriptExtraction.model_validate(json_object_from_response(text))
     except ValidationError as exc:
         logger.warning("Gemini transcript schema validation failed: %s", exc)
         raise GeminiResponseError("Gemini returned transcript data in an invalid format") from exc
@@ -142,120 +277,26 @@ def parse_transcript_response(text: str) -> TranscriptExtraction:
 async def analyze_transcript(
     transcript: str, language_hint: str | None = None
 ) -> TranscriptExtraction:
-    if not settings.GEMINI_API_KEY:
-        raise GeminiConfigurationError("Gemini transcript analysis is not configured")
-    model = quote(settings.GEMINI_MODEL.strip(), safe="-_.")
-    if not model:
-        raise GeminiConfigurationError("GEMINI_MODEL is not configured")
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent"
-    )
     hint = language_hint or "auto-detect"
-    body = {
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": f"{_TRANSCRIPT_PROMPT}\nLanguage hint: {hint}\n"
-                       f"<transcript>\n{transcript}\n</transcript>"}],
-        }],
-        "generationConfig": {
-            "temperature": 0,
-            "responseMimeType": "application/json",
-        },
-    }
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
-            response = await client.post(
-                url, headers={"x-goog-api-key": settings.GEMINI_API_KEY}, json=body
-            )
-    except httpx.TimeoutException as exc:
-        raise GeminiUpstreamError("Gemini timed out while analyzing the transcript") from exc
-    except httpx.HTTPError as exc:
-        raise GeminiUpstreamError("Could not contact Gemini") from exc
-    if response.is_error:
-        logger.warning("Gemini transcript request failed (%s): %s",
-                       response.status_code, response.text[:500])
-        if response.status_code in (401, 403):
-            raise GeminiConfigurationError("Gemini rejected the configured API key")
-        if response.status_code == 429:
-            raise GeminiUpstreamError("Gemini rate limit exceeded; try again later")
-        raise GeminiUpstreamError("Gemini could not analyze the transcript")
-    try:
-        data = response.json()
-        parts = data["candidates"][0]["content"]["parts"]
-        response_text = "".join(part.get("text", "") for part in parts)
-    except (ValueError, KeyError, IndexError, TypeError) as exc:
-        raise GeminiResponseError("Gemini returned an unexpected response") from exc
-    if not response_text.strip():
-        raise GeminiResponseError("Gemini returned no transcript data")
-    return parse_transcript_response(response_text)
+    text = await request_gemini_json(
+        [{"text": f"{_TRANSCRIPT_PROMPT}\nLanguage hint: {hint}\n"
+                  f"<transcript>\n{transcript}\n</transcript>"}],
+        "the transcript",
+    )
+    return parse_transcript_response(text)
 
 
 async def analyze_invoice_image(image: bytes, mime_type: str) -> InvoiceAnalysis:
-    if not settings.GEMINI_API_KEY:
-        raise GeminiConfigurationError("Gemini invoice analysis is not configured")
-
-    model = quote(settings.GEMINI_MODEL.strip(), safe="-_.")
-    if not model:
-        raise GeminiConfigurationError("GEMINI_MODEL is not configured")
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent"
-    )
-    body = {
-        "contents": [
+    text = await request_gemini_json(
+        [
+            {"text": _PROMPT},
             {
-                "role": "user",
-                "parts": [
-                    {"text": _PROMPT},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": base64.b64encode(image).decode("ascii"),
-                        }
-                    },
-                ],
-            }
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(image).decode("ascii"),
+                }
+            },
         ],
-        "generationConfig": {
-            "temperature": 0,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
-            response = await client.post(
-                url,
-                headers={"x-goog-api-key": settings.GEMINI_API_KEY},
-                json=body,
-            )
-    except httpx.TimeoutException as exc:
-        raise GeminiUpstreamError("Gemini timed out while analyzing the invoice") from exc
-    except httpx.HTTPError as exc:
-        raise GeminiUpstreamError("Could not contact Gemini") from exc
-
-    if response.is_error:
-        logger.warning(
-            "Gemini request failed with status %s: %s",
-            response.status_code,
-            response.text[:500],
-        )
-        if response.status_code in (401, 403):
-            raise GeminiConfigurationError("Gemini rejected the configured API key")
-        if response.status_code == 429:
-            raise GeminiUpstreamError("Gemini rate limit exceeded; try again later")
-        raise GeminiUpstreamError("Gemini could not analyze the invoice")
-
-    try:
-        data = response.json()
-        candidates = data["candidates"]
-        parts = candidates[0]["content"]["parts"]
-        text = "".join(part.get("text", "") for part in parts)
-    except (ValueError, KeyError, IndexError, TypeError) as exc:
-        logger.warning("Unexpected Gemini response: %s", response.text[:500])
-        raise GeminiResponseError("Gemini returned an unexpected response") from exc
-
-    if not text.strip():
-        raise GeminiResponseError("Gemini returned no invoice data")
+        "the invoice",
+    )
     return parse_invoice_response(text)

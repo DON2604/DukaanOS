@@ -5,13 +5,18 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from app.db.session import async_session, engine
 from app.db.base import Base
-from app.routers import auth, inventory, invoices, khata, sales
+from app.routers import auth, image_recognition, inventory, invoices, khata, sales
 from app.services.auth import delete_expired_unverified_users
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+
+# httpx logs a line per outbound request at INFO, which drowns our own logs and
+# duplicates what the calling service already reports on failure.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Import models so Base.metadata picks them up
 import app.models.intelligence  # noqa: F401
@@ -81,6 +86,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="DukaanOS", version="0.1.0", lifespan=lifespan)
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(image_recognition.router, prefix="/api")
 app.include_router(invoices.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
 app.include_router(khata.router, prefix="/api")
