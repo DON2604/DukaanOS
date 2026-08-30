@@ -14,7 +14,11 @@ from app.services.gemini import (
 )
 from app.services.image_recognition import ImageRecognitionService
 from app.services.inventory import list_inventory
-from app.schemas.image_recognition import ImageAnalysisResponse, ProductMatchResponse
+from app.schemas.image_recognition import (
+    ImageAnalysisResponse,
+    InventoryItemBase,
+    ProductMatchResponse,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -155,12 +159,19 @@ async def match_with_inventory(
         # Convert to response models
         response_matches = []
         for match in matches:
+            inventory_match = match.get('inventory_match')
+            if inventory_match is not None:
+                inventory_match = InventoryItemBase.model_validate(
+                    inventory_match,
+                    from_attributes=True,
+                )
             response_match = ProductMatchResponse(
                 recognized_product=match['recognized_product'],
-                inventory_match=match['inventory_match'],
+                inventory_match=inventory_match,
                 match_confidence=match['match_confidence'],
                 can_deduct=match['can_deduct'],
-                suggested_quantity=match.get('suggested_quantity', 1)
+                suggested_quantity=match.get('suggested_quantity', 1.0),
+                insufficient_stock_message=match.get('insufficient_stock_message'),
             )
             response_matches.append(response_match)
         

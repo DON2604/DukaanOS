@@ -1,8 +1,11 @@
 import asyncio
 import unittest
+import uuid
 from decimal import Decimal
 from unittest import mock
 
+from app.models.inventory import InventoryItem
+from app.schemas.image_recognition import ProductMatchResponse
 from app.services import gemini as gemini_service
 from app.services.gemini import GeminiResponseError, parse_invoice_response
 from app.services.inventory import normalize_product_text
@@ -45,6 +48,36 @@ class InventoryNormalizationTests(unittest.TestCase):
     def test_normalizes_case_unicode_and_whitespace(self):
         self.assertEqual(normalize_product_text("  RICE   Flour "), "rice flour")
         self.assertEqual(normalize_product_text("ＫＧ"), "kg")
+
+    def test_product_match_response_accepts_inventory_orm_model(self):
+        item = InventoryItem(
+            id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Apple",
+            normalized_name="apple",
+            quantity=Decimal("12.5"),
+            unit="kg",
+            normalized_unit="kg",
+            selling_price=Decimal("40.00"),
+            category="Fruit",
+        )
+
+        response = ProductMatchResponse(
+            recognized_product={
+                "name": "Apple",
+                "category": "Fruit",
+                "estimated_weight": 1.2,
+                "confidence": 0.93,
+                "description": "Fresh apple",
+            },
+            inventory_match=item,
+            match_confidence=0.94,
+            can_deduct=True,
+            suggested_quantity=1.2,
+        )
+
+        self.assertEqual(response.inventory_match.name, "Apple")
+        self.assertEqual(response.inventory_match.quantity, Decimal("12.5"))
 
     def test_falls_back_to_secondary_gemini_key_after_429(self):
         class FakeResponse:

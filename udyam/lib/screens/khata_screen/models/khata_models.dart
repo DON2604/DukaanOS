@@ -123,6 +123,53 @@ class RestockAlert {
   );
 }
 
+class VendorRecommendation {
+  const VendorRecommendation({
+    required this.vendorName,
+    required this.quotedPricePerUnit,
+    required this.discountPct,
+    required this.finalTotal,
+    required this.leadTimeDays,
+    required this.rating,
+    required this.rank,
+    required this.requiredQuantity,
+    this.unit = 'kg',
+    this.notes = '',
+    this.contactNumber = '',
+  });
+
+  final String vendorName;
+  final double quotedPricePerUnit;
+  final double discountPct;
+  final double finalTotal;
+  final int leadTimeDays;
+  final double rating;
+  final int rank;
+  final double requiredQuantity;
+  final String unit;
+  final String notes;
+  final String contactNumber;
+
+  factory VendorRecommendation.fromJson(Map<String, dynamic> json) =>
+      VendorRecommendation(
+        vendorName: (json['vendor_name'] ?? 'Vendor').toString(),
+        quotedPricePerUnit: _number(json['quoted_price_per_unit']),
+        discountPct: _number(json['discount_pct']),
+        finalTotal: _number(json['final_total']),
+        leadTimeDays: (json['lead_time_days'] is num
+            ? (json['lead_time_days'] as num).toInt()
+            : int.tryParse('${json['lead_time_days']}') ?? 1),
+        rating: _number(json['rating']),
+        rank: (json['rank'] is num
+            ? (json['rank'] as num).toInt()
+            : int.tryParse('${json['rank']}') ?? 1),
+        requiredQuantity: _number(json['required_quantity']),
+        unit: (json['unit'] ?? 'kg').toString(),
+        notes: (json['notes'] ?? '').toString(),
+        contactNumber: (json['contact_number'] ?? '').toString(),
+      );
+}
+
 class KhataCustomer {
   const KhataCustomer({
     required this.id,
@@ -251,6 +298,7 @@ class KhataDashboard {
     required this.customers,
     required this.recentEntries,
     this.restockAlerts = const [],
+    this.vendorRecommendations = const [],
   });
 
   final KhataSummary summary;
@@ -258,6 +306,7 @@ class KhataDashboard {
   final List<KhataCustomer> customers;
   final List<KhataEntry> recentEntries;
   final List<RestockAlert> restockAlerts;
+  final List<VendorRecommendation> vendorRecommendations;
 
   factory KhataDashboard.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'] is Map
@@ -303,6 +352,9 @@ class KhataDashboard {
     final restockAlerts = _maps(
       json['restock_alerts'],
     ).map(RestockAlert.fromJson).toList();
+    final vendorRecommendations = _maps(
+      json['vendor_recommendations'],
+    ).map(VendorRecommendation.fromJson).toList();
     for (final alert in restockAlerts) {
       insights.add(
         KhataInsight(
@@ -323,6 +375,7 @@ class KhataDashboard {
           .map(KhataEntry.fromJson)
           .toList(),
       restockAlerts: restockAlerts,
+      vendorRecommendations: vendorRecommendations,
     );
   }
 }

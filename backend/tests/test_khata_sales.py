@@ -12,9 +12,17 @@ from app.models.sales import InventoryMovement, Sale, SaleLine
 from app.schemas.khata import TranscriptExtraction
 from app.schemas.sales import CheckoutRequest
 from app.services.gemini import GeminiResponseError, parse_transcript_response
-from app.services.notifications import format_restock_telegram
+from app.services.notifications import (
+    format_restock_telegram,
+    format_sale_receipt_telegram,
+    notify_sale_receipt,
+)
 from app.services.analytics import build_dashboard
 from app.services.scoring import calculate_customer_score
+from app.services.vendor_recommendations import (
+    build_vendor_recommendations,
+    format_vendor_telegram_message,
+)
 from app.services.khata import (
     AUTO_CREATE_CONFIDENCE,
     is_explicit_valid_obligation,
@@ -23,6 +31,72 @@ from app.services.khata import (
 )
 from app.services.restock import classify_item
 from app.services.sales import checkout
+
+
+class VendorRecommendationTests(unittest.IsolatedAsyncioTestCase):
+    def test_build_vendor_recommendations_ranks_by_discount_and_price(self):
+        recommendations = build_vendor_recommendations(
+            item_name="Apples",
+            required_quantity=Decimal("50"),
+            unit="kg",
+        )
+
+        self.assertEqual(recommendations[0].vendor_name, "Green Valley Farms")
+        self.assertGreaterEqual(recommendations[0].rank, 1)
+        self.assertEqual(recommendations[0].required_quantity, Decimal("50"))
+        self.assertIn("discount_pct", recommendations[0].model_dump())
+
+    def test_format_vendor_telegram_message_mentions_requested_quantity(self):
+        recommendations = build_vendor_recommendations(
+            item_name="Apples",
+            required_quantity=Decimal("50"),
+            unit="kg",
+        )
+        message = format_vendor_telegram_message(recommendations)
+
+        self.assertIn("Apples", message)
+        self.assertIn("50 kg", message)
+        self.assertIn("Green Valley Farms", message)
+        self.assertTrue(recommendations[0].is_notification_target)
+        self.assertIn("notification recipient", message.lower())
+
+    def test_format_sale_receipt_telegram_contains_billing_details(self):
+        message = format_sale_receipt_telegram(
+            receipt_number="RCP-123456",
+            items=[
+                {"name": "Apples", "quantity": Decimal("2"), "unit": "kg", "unit_price": Decimal("40.00"), "line_total": Decimal("80.00")},
+                {"name": "Milk", "quantity": Decimal("1"), "unit": "ltr", "unit_price": Decimal("45.00"), "line_total": Decimal("45.00")},
+            ],
+            subtotal=Decimal("125.00"),
+            discount=Decimal("5.00"),
+            total=Decimal("120.00"),
+            payment_type="cash",
+            customer_name="Ravi",
+        )
+
+        self.assertIn("RCP-123456", message)
+        self.assertIn("Apples", message)
+        self.assertIn("₹120.00", message)
+        self.assertIn("cash", message.lower())
+        self.assertIn("Ravi", message)
+
+    async def test_notify_sale_receipt_sends_directly_to_fixed_chat_id(self):
+        with patch("app.services.notifications.send_telegram_message", new=AsyncMock(return_value=True)) as send_mock:
+            sent = await notify_sale_receipt(
+                receipt_number="RCP-654321",
+                items=[
+                    {"name": "Apples", "quantity": Decimal("2"), "unit": "kg", "unit_price": Decimal("40.00"), "line_total": Decimal("80.00")},
+                ],
+                subtotal=Decimal("80.00"),
+                discount=Decimal("0.00"),
+                total=Decimal("80.00"),
+                payment_type="credit",
+                customer_name="Sita",
+            )
+
+        self.assertTrue(sent)
+        send_mock.assert_awaited_once()
+        self.assertEqual(send_mock.await_args.args[0], 5791840162)
 
 
 class CustomerScoringTests(unittest.TestCase):
@@ -426,6 +500,7 @@ class DashboardAnalyticsTests(unittest.IsolatedAsyncioTestCase):
                 "recent_entries",
                 "insights",
                 "restock_alerts",
+                "vendor_recommendations",
             },
         )
         self.assertTrue(dashboard.restock_alerts)

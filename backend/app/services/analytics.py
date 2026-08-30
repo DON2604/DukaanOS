@@ -17,6 +17,7 @@ from app.schemas.khata import (
 from app.services.khata import entry_response
 from app.services.restock import sync_inventory_intelligence
 from app.services.scoring import calculate_customer_score
+from app.services.vendor_recommendations import build_vendor_recommendations_for_alerts
 
 
 ZERO = Decimal("0")
@@ -133,6 +134,7 @@ async def build_dashboard(db: AsyncSession, user_id: uuid.UUID) -> KhataDashboar
         )
     ).scalars()
 
+    restock_alerts = await sync_inventory_intelligence(db, user_id)
     return KhataDashboard(
         summary=DashboardSummary(
             revenue=revenue,
@@ -157,5 +159,6 @@ async def build_dashboard(db: AsyncSession, user_id: uuid.UUID) -> KhataDashboar
             )
             for batch in batches
         ],
-        restock_alerts=await sync_inventory_intelligence(db, user_id),
+        restock_alerts=restock_alerts,
+        vendor_recommendations=build_vendor_recommendations_for_alerts(restock_alerts),
     )

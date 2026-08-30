@@ -23,6 +23,7 @@ class AppConstants {
   static const String khataTranscriptAnalyze = '/api/khata/transcripts/analyze';
   static const String khataEntries = '/api/khata/entries';
   static const String salesCheckout = '/api/sales/checkout';
+  static const String salesSendReceipt = '/api/sales/send-receipt';
 
   static const String sessionIdKey = 'session_id';
   static const String accessTokenKey = 'access_token';

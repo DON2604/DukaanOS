@@ -58,8 +58,13 @@ class _ImageScannerOverlayState extends State<ImageScannerOverlay> {
         });
         _showNoProductsDialog();
       } else {
-        // Show products selection dialog
-        _showProductSelectionDialog(matches);
+        for (final match in matches) {
+          _addProductToCart(match);
+        }
+
+        setState(() {
+          _status = "Added ${matches.length} product${matches.length == 1 ? '' : 's'} to bill";
+        });
       }
     } catch (e) {
       if (!mounted) return;
@@ -146,12 +151,14 @@ class _ImageScannerOverlayState extends State<ImageScannerOverlay> {
               final product = match.recognizedProduct;
               final inventory = match.inventoryMatch;
 
+              final canAddManually = match.canDeduct || inventory == null;
+
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 child: ListTile(
                   leading: Icon(
-                    match.canDeduct ? Icons.check_circle : Icons.warning,
-                    color: match.canDeduct ? Colors.green : Colors.orange,
+                    canAddManually ? Icons.check_circle : Icons.warning,
+                    color: canAddManually ? Colors.green : Colors.orange,
                   ),
                   title: Text(
                     product.name,
@@ -195,7 +202,7 @@ class _ImageScannerOverlayState extends State<ImageScannerOverlay> {
                       ),
                     ],
                   ),
-                  trailing: match.canDeduct
+                  trailing: canAddManually
                       ? ElevatedButton(
                           onPressed: () => _addProductToCart(match),
                           style: ElevatedButton.styleFrom(
@@ -236,38 +243,33 @@ class _ImageScannerOverlayState extends State<ImageScannerOverlay> {
 
   Future<void> _addProductToCart(InventoryMatch match) async {
     try {
-      final inventory = match.inventoryMatch!;
+      final inventory = match.inventoryMatch;
       final referenceId = const Uuid().v4();
+      final quantity = match.suggestedQuantity > 0 ? match.suggestedQuantity : 1.0;
 
-      // Deduct from inventory
-      await ImageRecognitionService.deductInventory(
-        inventoryItemId: inventory.inventoryItemId!,
-        quantity: match.suggestedQuantity,
-        referenceId: referenceId,
-      );
-
-      // Create product for cart
       final product = Product(
-        barcode: 'IMG_${inventory.inventoryItemId}',
+        barcode: inventory != null
+            ? 'IMG_${inventory.inventoryItemId}'
+            : 'IMG_${referenceId}',
         name: match.recognizedProduct.name,
-        description: inventory.description,
-        price: inventory.price,
-        imageUrl: inventory.imageUrl,
-        inventoryItemId: inventory.inventoryItemId,
-        quantity: inventory.quantity,
-        unit: inventory.unit,
-        category: inventory.category,
+        description: inventory?.description ?? match.recognizedProduct.description,
+        price: inventory?.price ?? 50.0,
+        imageUrl: inventory?.imageUrl ?? '',
+        inventoryItemId: inventory?.inventoryItemId,
+        quantity: inventory?.quantity ?? quantity,
+        unit: inventory?.unit ?? 'pcs',
+        category: inventory?.category ?? match.recognizedProduct.category,
       );
 
-      // Add to cart
       widget.onProductIdentified(product);
 
-      // Show success feedback
       HapticFeedback.heavyImpact();
 
       if (!mounted) return;
 
-      Navigator.of(context).pop(); // Close dialog
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
 
       setState(() {
         _status = "Added: ${match.recognizedProduct.name}";
@@ -275,7 +277,7 @@ class _ImageScannerOverlayState extends State<ImageScannerOverlay> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added ${match.recognizedProduct.name} to cart'),
+          content: Text('Added ${match.recognizedProduct.name} to bill'),
           backgroundColor: Colors.green,
         ),
       );

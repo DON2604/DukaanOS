@@ -3,10 +3,12 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RecognizedProduct(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     category: str
     estimated_weight: Optional[float] = None
@@ -22,6 +24,8 @@ class ImageAnalysisResponse(BaseModel):
 
 
 class InventoryItemBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     quantity: Decimal

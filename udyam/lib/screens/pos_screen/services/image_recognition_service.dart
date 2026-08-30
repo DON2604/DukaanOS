@@ -23,12 +23,24 @@ class RecognizedProduct {
     required this.description,
   });
 
+  static double _toDouble(dynamic value, {double fallback = 0.0}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return fallback;
+  }
+
   factory RecognizedProduct.fromJson(Map<String, dynamic> json) {
     return RecognizedProduct(
       name: json['name'] ?? '',
       category: json['category'] ?? '',
-      estimatedWeight: json['estimated_weight']?.toDouble(),
-      confidence: (json['confidence'] ?? 0.0).toDouble(),
+      estimatedWeight: _toDouble(json['estimated_weight'], fallback: 0.0) == 0.0
+          ? null
+          : _toDouble(json['estimated_weight'], fallback: 0.0),
+      confidence: _toDouble(json['confidence']),
       description: json['description'] ?? '',
     );
   }
@@ -78,15 +90,25 @@ class InventoryMatch {
     this.insufficientStockMessage,
   });
 
+  static double _toDouble(dynamic value, {double fallback = 0.0}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return fallback;
+  }
+
   factory InventoryMatch.fromJson(Map<String, dynamic> json) {
     return InventoryMatch(
       recognizedProduct: RecognizedProduct.fromJson(json['recognized_product']),
       inventoryMatch: json['inventory_match'] != null
           ? Product.fromInventoryJson(json['inventory_match'])
           : null,
-      matchConfidence: (json['match_confidence'] ?? 0.0).toDouble(),
+      matchConfidence: _toDouble(json['match_confidence']),
       canDeduct: json['can_deduct'] ?? false,
-      suggestedQuantity: (json['suggested_quantity'] ?? 1.0).toDouble(),
+      suggestedQuantity: _toDouble(json['suggested_quantity'], fallback: 1.0),
       insufficientStockMessage: json['insufficient_stock_message'],
     );
   }

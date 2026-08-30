@@ -175,23 +175,28 @@ class ImageRecognitionService:
                 "recognized_product": product,
                 "inventory_match": best_match,
                 "match_confidence": best_score,
-                "can_deduct": best_match is not None and best_match.quantity > 0
+                "can_deduct": best_match is not None and best_match.quantity > 0,
             }
-            
-            if best_match:
+
+            if best_match is None:
+                match_result["can_deduct"] = True
+                match_result["insufficient_stock_message"] = (
+                    "Not found in inventory. This item can still be added manually."
+                )
+            else:
                 # Enhanced weight-based quantity calculation
                 suggested_quantity = self._calculate_suggested_quantity(
                     estimated_weight, best_match
                 )
                 match_result["suggested_quantity"] = suggested_quantity
-                
+
                 # Check if we have enough inventory for the suggested quantity
                 if best_match.quantity < suggested_quantity:
                     match_result["can_deduct"] = False
                     match_result["insufficient_stock_message"] = (
                         f"Need {suggested_quantity} but only {best_match.quantity} available"
                     )
-            
+
             matches.append(match_result)
         
         return matches

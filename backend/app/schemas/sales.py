@@ -8,6 +8,24 @@ from pydantic import BaseModel, Field, model_validator
 from app.schemas.khata import CustomerCreate
 
 
+class ReceiptLineItem(BaseModel):
+    name: str
+    quantity: Decimal = Field(max_digits=20, decimal_places=6)
+    unit: str | None = None
+    unit_price: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    line_total: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+
+
+class SendReceiptRequest(BaseModel):
+    receipt_number: str
+    items: list[ReceiptLineItem] = Field(min_length=1)
+    subtotal: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    discount: Decimal = Field(default=Decimal("0"), ge=0, max_digits=20, decimal_places=2)
+    total: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    payment_type: Literal["cash", "credit"]
+    customer_name: str | None = None
+
+
 class CheckoutLine(BaseModel):
     inventory_item_id: uuid.UUID
     quantity: Decimal = Field(gt=0, max_digits=20, decimal_places=6)

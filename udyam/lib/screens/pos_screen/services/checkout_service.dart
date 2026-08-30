@@ -76,6 +76,59 @@ class CheckoutService {
     throw const CheckoutException('Checkout failed. Your bill was preserved.');
   }
 
+  /// Sends a bill receipt via Telegram without touching inventory.
+  /// Silently ignores failures so the checkout UX is never blocked.
+  Future<void> sendReceipt({
+    required String receiptNumber,
+    required List<CartItem> items,
+    required double subtotal,
+    required double discount,
+    required double total,
+    required PaymentType paymentType,
+    String? customerName,
+  }) async {
+    try {
+      final token = await SessionStore.getAccessToken();
+      if (token == null || token.isEmpty) return;
+      final base = AppConstants.apiBaseUrl.trim().replaceAll(
+        RegExp(r'/+$'),
+        '',
+      );
+      await _client
+          .post(
+            Uri.parse('$base${AppConstants.salesSendReceipt}'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'receipt_number': receiptNumber,
+              'items': items
+                  .map(
+                    (item) => {
+                      'name': item.product.name,
+                      'quantity': item.quantity,
+                      'unit': item.product.unit,
+                      'unit_price': item.product.price,
+                      'line_total': item.totalPrice,
+                    },
+                  )
+                  .toList(),
+              'subtotal': subtotal,
+              'discount': discount,
+              'total': total,
+              'payment_type': paymentType.name,
+              if (customerName?.trim().isNotEmpty == true)
+                'customer_name': customerName!.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // Receipt sending is best-effort — never block the checkout flow
+    }
+  }
+
   Future<Map<String, String>> _resolveInventoryIds(
     List<CartItem> items, {
     required String base,

@@ -25,7 +25,7 @@ from app.services.gemini import (
     GeminiResponseError,
     GeminiUpstreamError,
 )
-from app.services.notifications import notify_restock_if_needed
+from app.services.notifications import notify_restock_if_needed, notify_vendor_if_needed
 from app.services.khata import (
     batch_response,
     entry_response,
@@ -52,6 +52,12 @@ async def dashboard(
         current_user.id,
         current_user.telegram_chat_id,
         data.restock_alerts,
+    )
+    background_tasks.add_task(
+        notify_vendor_if_needed,
+        current_user.id,
+        data.restock_alerts,
+        data.vendor_recommendations,
     )
     return data
 

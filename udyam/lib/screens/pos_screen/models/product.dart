@@ -21,6 +21,16 @@ class Product {
     this.category,
   });
 
+  static double _toDouble(dynamic value, {double fallback = 0.0}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return fallback;
+  }
+
   factory Product.fromInventoryJson(Map<String, dynamic> json) {
     return Product(
       barcode:
@@ -28,12 +38,12 @@ class Product {
           '', // Use inventory ID as barcode for image-recognized items
       name: json['name'] ?? '',
       description: json['category'] ?? 'Image recognized item',
-      price: (json['selling_price'] as num?)?.toDouble() ?? 0.0,
+      price: Product._toDouble(json['selling_price']),
       imageUrl: '',
-      inventoryItemId: json['id'],
-      quantity: (json['quantity'] as num?)?.toDouble(),
-      unit: json['unit'],
-      category: json['category'],
+      inventoryItemId: json['id']?.toString(),
+      quantity: Product._toDouble(json['quantity'], fallback: 0.0),
+      unit: json['unit']?.toString(),
+      category: json['category']?.toString(),
     );
   }
 }

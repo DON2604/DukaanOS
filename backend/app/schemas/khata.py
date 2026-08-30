@@ -305,12 +305,29 @@ class RestockAlert(BaseModel):
     daily_sales_rate: Decimal = Decimal("0")
 
 
+class VendorRecommendation(BaseModel):
+    item_name: str = "inventory item"
+    vendor_name: str
+    quoted_price_per_unit: Decimal
+    discount_pct: Decimal = Decimal("0")
+    final_total: Decimal
+    lead_time_days: int = 1
+    rating: Decimal = Decimal("0")
+    rank: int = 1
+    required_quantity: Decimal
+    unit: str = "kg"
+    notes: str = ""
+    contact_number: str = ""
+    is_notification_target: bool = False
+
+
 class KhataDashboard(BaseModel):
     summary: DashboardSummary
     customer_balances: list[CustomerBalance]
     recent_entries: list[KhataEntryResponse]
     insights: list[DashboardInsight]
     restock_alerts: list[RestockAlert] = Field(default_factory=list)
+    vendor_recommendations: list[VendorRecommendation] = Field(default_factory=list)
 
 
 class TranscriptAnalyzeResponse(BaseModel):

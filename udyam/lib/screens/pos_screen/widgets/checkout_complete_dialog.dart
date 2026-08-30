@@ -106,6 +106,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
 Future<void> showCheckoutCompleteDialog(
   BuildContext context, {
   required double total,
+  String receiptNumber = 'RCP-000000',
+  String note = 'Receipt',
   required VoidCallback onConfirm,
 }) {
   return showDialog<void>(
@@ -113,7 +115,20 @@ Future<void> showCheckoutCompleteDialog(
     builder: (context) => AlertDialog(
       backgroundColor: const Color(0xFFF7F3EB),
       title: const Text('Checkout Complete'),
-      content: Text('Collected ₹${total.toStringAsFixed(2)} successfully!'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Collected ₹${total.toStringAsFixed(2)} successfully!'),
+          const SizedBox(height: 12),
+          Text(
+            'Receipt No: $receiptNumber',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(note),
+        ],
+      ),
       actions: [
         FilledButton(
           style: FilledButton.styleFrom(

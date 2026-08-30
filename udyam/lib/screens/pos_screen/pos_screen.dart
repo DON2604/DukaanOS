@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -207,34 +208,38 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       final title = info['title'] as String;
       final brand = (info['brand'] as String?) ?? '';
       final imageUrl = (info['imageUrl'] as String?) ?? '';
-      final double price = (info['lowestPrice'] as num?)?.toDouble() ?? 0.0;
+      final priceValue = info['lowestPrice'];
+      final double resolvedPrice = priceValue is num
+          ? priceValue.toDouble()
+          : (double.tryParse(priceValue?.toString() ?? '') ?? 50.0);
 
       final newProduct = Product(
         barcode: barcode,
         name: title,
         description: brand.isNotEmpty ? brand : 'UPC: $barcode',
-        price: price,
+        price: resolvedPrice > 0 ? resolvedPrice : 50.0,
         imageUrl: imageUrl,
       );
 
       _catalog[barcode] = newProduct;
       _addProductToCart(newProduct);
       setState(() {
-        _scannerStatus = "Added: ${newProduct.name}";
+        _scannerStatus =
+            "Added: ${newProduct.name} (₹${newProduct.price.toStringAsFixed(2)})";
       });
     } else {
       final fallbackProduct = Product(
         barcode: barcode,
         name: 'Item #$barcode',
         description: 'Scanned item',
-        price: 0.0,
+        price: 50.0,
         imageUrl: '',
       );
 
       _catalog[barcode] = fallbackProduct;
       _addProductToCart(fallbackProduct);
       setState(() {
-        _scannerStatus = "Added: Item #$barcode (₹0.00)";
+        _scannerStatus = "Added: Item #$barcode (₹50.00)";
       });
     }
   }
@@ -324,6 +329,41 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     if (selection == null || !mounted) return;
     setState(() => _isCheckingOut = true);
     try {
+      final hasCustomItems = _cart.any(
+        (item) =>
+            item.product.inventoryItemId == null || item.product.price <= 0,
+      );
+
+      if (hasCustomItems) {
+        final receiptNumber =
+            'RCP-${DateTime.now().millisecondsSinceEpoch % 1000000}';
+        final completedTotal = _total;
+        final cartSnapshot = List<CartItem>.from(_cart);
+        final subtotalSnapshot = _subtotal;
+        final discountSnapshot = _discount;
+        _clearBill();
+        unawaited(
+          _checkoutService.sendReceipt(
+            receiptNumber: receiptNumber,
+            items: cartSnapshot,
+            subtotal: subtotalSnapshot,
+            discount: discountSnapshot,
+            total: completedTotal,
+            paymentType: selection.paymentType,
+            customerName: selection.customerName,
+          ),
+        );
+        if (!mounted) return;
+        await showCheckoutCompleteDialog(
+          context,
+          total: completedTotal,
+          receiptNumber: receiptNumber,
+          note: 'Custom scanned item bill',
+          onConfirm: () {},
+        );
+        return;
+      }
+
       await _checkoutService.checkout(
         items: List<CartItem>.from(_cart),
         discount: _discount,
@@ -332,10 +372,28 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       final completedTotal = _total;
+      final receiptNumber =
+          'RCP-${DateTime.now().millisecondsSinceEpoch % 1000000}';
+      final cartSnapshot = List<CartItem>.from(_cart);
+      final subtotalSnapshot = _subtotal;
+      final discountSnapshot = _discount;
       _clearBill();
+      unawaited(
+        _checkoutService.sendReceipt(
+          receiptNumber: receiptNumber,
+          items: cartSnapshot,
+          subtotal: subtotalSnapshot,
+          discount: discountSnapshot,
+          total: completedTotal,
+          paymentType: selection.paymentType,
+          customerName: selection.customerName,
+        ),
+      );
       await showCheckoutCompleteDialog(
         context,
         total: completedTotal,
+        receiptNumber: receiptNumber,
+        note: 'Standard checkout receipt',
         onConfirm: () {},
       );
     } catch (error) {
